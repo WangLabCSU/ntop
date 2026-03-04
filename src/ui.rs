@@ -40,8 +40,17 @@ impl SortBy {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum FocusPanel {
+    Network,
+    DiskIo,
+    DiskUsage,
+    Processes,
+}
+
 pub struct App {
     pub mode: AppMode,
+    pub focus: FocusPanel,
     pub selected_index: usize,
     pub filter_user: Option<String>,
     pub filter_pid: Option<u32>,
@@ -61,6 +70,7 @@ impl App {
     pub fn new() -> Self {
         Self {
             mode: AppMode::Normal,
+            focus: FocusPanel::Processes,
             selected_index: 0,
             filter_user: None,
             filter_pid: None,
@@ -91,15 +101,47 @@ impl App {
         }
     }
 
-    pub fn scroll_down(&mut self, visible: usize) {
-        if self.selected_index >= self.scroll_offset + visible {
-            self.scroll_offset = self.selected_index.saturating_sub(visible - 1);
+    pub fn scroll_down(&mut self, visible: usize, total: usize) {
+        match self.focus {
+            FocusPanel::Processes => {
+                if self.selected_index < total.saturating_sub(1) {
+                    self.selected_index += 1;
+                }
+                if self.selected_index >= self.scroll_offset + visible {
+                    self.scroll_offset = self.selected_index.saturating_sub(visible - 1);
+                }
+            }
+            FocusPanel::DiskIo => {
+                self.disk_io_scroll = (self.disk_io_scroll + 1).min(total.saturating_sub(visible));
+            }
+            FocusPanel::DiskUsage => {
+                self.disk_usage_scroll = (self.disk_usage_scroll + 1).min(total.saturating_sub(visible));
+            }
+            FocusPanel::Network => {
+                self.network_scroll = (self.network_scroll + 1).min(total.saturating_sub(visible));
+            }
         }
     }
 
-    pub fn scroll_up(&mut self) {
-        if self.selected_index < self.scroll_offset {
-            self.scroll_offset = self.selected_index;
+    pub fn scroll_up(&mut self, visible: usize, _total: usize) {
+        match self.focus {
+            FocusPanel::Processes => {
+                if self.selected_index > 0 {
+                    self.selected_index -= 1;
+                }
+                if self.selected_index < self.scroll_offset {
+                    self.scroll_offset = self.selected_index;
+                }
+            }
+            FocusPanel::DiskIo => {
+                self.disk_io_scroll = self.disk_io_scroll.saturating_sub(1);
+            }
+            FocusPanel::DiskUsage => {
+                self.disk_usage_scroll = self.disk_usage_scroll.saturating_sub(1);
+            }
+            FocusPanel::Network => {
+                self.network_scroll = self.network_scroll.saturating_sub(1);
+            }
         }
     }
 
@@ -116,9 +158,21 @@ impl App {
         self.scroll_offset = 0;
     }
 
+    pub fn cycle_focus(&mut self) {
+        self.focus = match self.focus {
+            FocusPanel::Network => FocusPanel::DiskIo,
+            FocusPanel::DiskIo => FocusPanel::DiskUsage,
+            FocusPanel::DiskUsage => FocusPanel::Processes,
+            FocusPanel::Processes => FocusPanel::Network,
+        };
+    }
+
     pub fn reset_selection(&mut self) {
         self.selected_index = 0;
         self.scroll_offset = 0;
+        self.disk_usage_scroll = 0;
+        self.disk_io_scroll = 0;
+        self.network_scroll = 0;
     }
 }
 
@@ -150,22 +204,22 @@ pub fn draw(f: &mut Frame, app: &mut App, net_stats: &[NetworkStats], net_deltas
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(35),  // Left: System info (Network + Disk)
-            Constraint::Percentage(65),  // Right: Processes
+            Constraint::Percentage(40),  // Left: System info (Network + Disk)
+            Constraint::Percentage(60),  // Right: Processes
         ])
         .split(main_chunks[1]);
 
-    // Left side - split vertically
+    // Left side - split vertically with better proportions
     let left_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),   // Mini network summary
-            Constraint::Percentage(40), // Disk I/O
-            Constraint::Percentage(60), // Disk Usage
+            Constraint::Percentage(25),  // Network
+            Constraint::Percentage(25),  // Disk I/O
+            Constraint::Percentage(50),  // Disk Usage
         ])
         .split(content_chunks[0]);
 
-    draw_network_mini(f, app, net_stats, net_deltas, left_chunks[0]);
+    draw_network_scrollable(f, app, net_stats, net_deltas, left_chunks[0]);
     draw_disk_io_scrollable(f, app, disk_deltas, left_chunks[1]);
     draw_disk_usage_scrollable(f, app, disk_usage, left_chunks[2]);
     
@@ -206,36 +260,102 @@ fn draw_compact_header(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(header, area);
 }
 
-fn draw_network_mini(f: &mut Frame, _app: &App, stats: &[NetworkStats], deltas: &[NetworkStatsDelta], area: Rect) {
+fn draw_network_scrollable(f: &mut Frame, app: &mut App, stats: &[NetworkStats], deltas: &[NetworkStatsDelta], area: Rect) {
+    let is_focused = matches!(app.focus, FocusPanel::Network);
+    let border_style = if is_focused {
+        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Green)
+    };
+
+    let block = Block::default()
+        .title(format!(" Network [{} interfaces] ", stats.len()))
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .title_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
     if stats.is_empty() {
+        f.render_widget(Paragraph::new("No network interfaces").style(Style::default().fg(Color::Yellow)), inner);
         return;
     }
 
-    let mut lines = vec![];
-    for (s, d) in stats.iter().zip(deltas.iter()) {
-        lines.push(Line::from(vec![
-            Span::styled(format!("{:8}", s.interface), Style::default().fg(Color::Cyan)),
-            Span::raw(" "),
-            Span::styled(format!("▼{}", net_format_bytes_per_sec(d.rx_bytes_sec)), Style::default().fg(Color::Green)),
-            Span::raw(" "),
-            Span::styled(format!("▲{}", net_format_bytes_per_sec(d.tx_bytes_sec)), Style::default().fg(Color::Red)),
-        ]));
+    let header_height = 1;
+    let visible_rows = inner.height.saturating_sub(header_height) as usize;
+
+    // Ensure scroll offset is valid
+    if app.network_scroll > stats.len().saturating_sub(visible_rows) {
+        app.network_scroll = stats.len().saturating_sub(visible_rows);
     }
 
-    let block = Block::default()
-        .title(" Network ")
-        .borders(Borders::ALL)
-        .title_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
-    
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-    f.render_widget(Paragraph::new(lines), inner);
+    let rows: Vec<Row> = stats
+        .iter()
+        .zip(deltas.iter())
+        .skip(app.network_scroll)
+        .take(visible_rows)
+        .map(|(s, d)| {
+            Row::new(vec![
+                Cell::from(Span::styled(&s.interface, Style::default().fg(Color::Cyan))),
+                Cell::from(Span::styled(net_format_bytes_per_sec(d.rx_bytes_sec), Style::default().fg(Color::Green))),
+                Cell::from(Span::styled(net_format_bytes_per_sec(d.tx_bytes_sec), Style::default().fg(Color::Red))),
+            ])
+        })
+        .collect();
+
+    let header = Row::new(vec![
+        Cell::from(Span::styled("Interface", Style::default().add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled("▼RX/s", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled("▲TX/s", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))),
+    ]);
+
+    let table = Table::new(rows, [
+        Constraint::Length(15),
+        Constraint::Length(12),
+        Constraint::Length(12),
+    ])
+    .header(header)
+    .column_spacing(1);
+
+    f.render_widget(table, inner);
+
+    // Draw scrollbar if needed
+    if stats.len() > visible_rows {
+        let mut scrollbar_state = ScrollbarState::new(stats.len())
+            .position(app.network_scroll)
+            .viewport_content_length(visible_rows);
+        
+        let scrollbar_area = Rect {
+            x: inner.x + inner.width.saturating_sub(1),
+            y: inner.y + 1,
+            width: 1,
+            height: inner.height.saturating_sub(2),
+        };
+        
+        f.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .thumb_style(if is_focused { Style::default().fg(Color::Green) } else { Style::default().fg(Color::DarkGray) })
+                .track_style(Style::default().fg(Color::DarkGray)),
+            scrollbar_area,
+            &mut scrollbar_state,
+        );
+    }
 }
 
 fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta], area: Rect) {
+    let is_focused = matches!(app.focus, FocusPanel::DiskIo);
+    let border_style = if is_focused {
+        Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Blue)
+    };
+
     let block = Block::default()
         .title(format!(" Disk I/O [{} devices] ", deltas.len()))
         .borders(Borders::ALL)
+        .border_style(border_style)
         .title_style(Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD));
 
     let inner = block.inner(area);
@@ -310,7 +430,7 @@ fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta],
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(Style::default().fg(Color::Blue))
+                .thumb_style(if is_focused { Style::default().fg(Color::Blue) } else { Style::default().fg(Color::DarkGray) })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -319,37 +439,60 @@ fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta],
 }
 
 fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage], area: Rect) {
+    let is_focused = matches!(app.focus, FocusPanel::DiskUsage);
+    let border_style = if is_focused {
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Yellow)
+    };
+
+    // Filter to show only real filesystems with hierarchy
+    let real_usage: Vec<&DiskUsage> = usage
+        .iter()
+        .filter(|d| {
+            // Only show block devices and NFS mounts
+            let is_block_device = d.filesystem.starts_with("/dev/") || 
+                                  d.filesystem.contains(":");  // NFS
+            let is_not_virtual = !d.filesystem.starts_with("tmpfs") &&
+                                 !d.filesystem.starts_with("devtmpfs") &&
+                                 !d.filesystem.starts_with("cgroup") &&
+                                 !d.filesystem.starts_with("sysfs") &&
+                                 !d.filesystem.starts_with("proc") &&
+                                 !d.filesystem.starts_with("nsfs") &&
+                                 !d.filesystem.starts_with("sunrpc") &&
+                                 !d.filesystem.starts_with("pstore") &&
+                                 !d.filesystem.starts_with("bpf") &&
+                                 !d.filesystem.starts_with("configfs") &&
+                                 !d.filesystem.starts_with("tracefs") &&
+                                 !d.filesystem.starts_with("debugfs") &&
+                                 !d.filesystem.starts_with("securityfs") &&
+                                 !d.filesystem.starts_with("efivarfs") &&
+                                 !d.filesystem.starts_with("fusectl") &&
+                                 !d.filesystem.starts_with("mqueue") &&
+                                 !d.filesystem.starts_with("hugetlbfs") &&
+                                 !d.filesystem.starts_with("ramfs") &&
+                                 !d.filesystem.starts_with("overlay");
+            
+            is_block_device && is_not_virtual && d.size > 0
+        })
+        .collect();
+
     let block = Block::default()
-        .title(format!(" Disk Usage [{} filesystems] ", usage.len()))
+        .title(format!(" Disk Usage [{} filesystems] ", real_usage.len()))
         .borders(Borders::ALL)
+        .border_style(border_style)
         .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    if usage.is_empty() {
+    if real_usage.is_empty() {
         f.render_widget(Paragraph::new("No filesystems").style(Style::default().fg(Color::Yellow)), inner);
         return;
     }
 
     let header_height = 1;
     let visible_rows = inner.height.saturating_sub(header_height) as usize;
-
-    // Filter out virtual filesystems for cleaner display
-    let real_usage: Vec<&DiskUsage> = usage
-        .iter()
-        .filter(|d| {
-            !d.filesystem.starts_with("loop") &&
-            !d.filesystem.starts_with("nsfs") &&
-            !d.filesystem.starts_with("sunrpc") &&
-            d.size > 0
-        })
-        .collect();
-
-    if real_usage.is_empty() {
-        f.render_widget(Paragraph::new("No real filesystems").style(Style::default().fg(Color::Yellow)), inner);
-        return;
-    }
 
     // Ensure scroll offset is valid
     if app.disk_usage_scroll > real_usage.len().saturating_sub(visible_rows) {
@@ -361,43 +504,47 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
         .skip(app.disk_usage_scroll)
         .take(visible_rows)
         .map(|d| {
-            let use_style = if d.use_percent > 80.0 {
+            let use_style = if d.use_percent > 90.0 {
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-            } else if d.use_percent > 50.0 {
+            } else if d.use_percent > 70.0 {
                 Style::default().fg(Color::Yellow)
             } else {
                 Style::default().fg(Color::Green)
             };
 
-            // Show mount point as primary identifier, device as secondary
-            let mount_display = truncate(&d.mounted_on, 18);
-            let dev_display = if d.device.len() > 10 {
-                truncate(&d.device, 10)
+            // Show mount point as primary identifier
+            let mount_display = truncate(&d.mounted_on, 20);
+            let fs_display = if d.filesystem.contains(":") {
+                // NFS mount - show server:path
+                truncate(&d.filesystem, 18)
             } else {
-                d.device.clone()
+                truncate(&d.device, 12)
             };
 
             Row::new(vec![
                 Cell::from(Span::styled(mount_display, Style::default().fg(Color::Cyan))),
-                Cell::from(Span::styled(dev_display, Style::default().fg(Color::Gray))),
+                Cell::from(Span::styled(fs_display, Style::default().fg(Color::Gray))),
                 Cell::from(Span::styled(format_bytes_size(d.size), Style::default())),
                 Cell::from(Span::styled(format_bytes_size(d.used), Style::default())),
-                Cell::from(Span::styled(format!("{:.0}%", d.use_percent), use_style)),
+                Cell::from(Span::styled(format_bytes_size(d.avail), Style::default())),
+                Cell::from(Span::styled(format!("{:>4.0}%", d.use_percent), use_style)),
             ])
         })
         .collect();
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("Mounted", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Device", Style::default().add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled("Mounted On", Style::default().add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled("Source", Style::default().add_modifier(Modifier::BOLD))),
         Cell::from(Span::styled("Size", Style::default().add_modifier(Modifier::BOLD))),
         Cell::from(Span::styled("Used", Style::default().add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled("Avail", Style::default().add_modifier(Modifier::BOLD))),
         Cell::from(Span::styled("Use%", Style::default().add_modifier(Modifier::BOLD))),
     ]);
 
     let table = Table::new(rows, [
-        Constraint::Length(18),
-        Constraint::Length(10),
+        Constraint::Length(20),
+        Constraint::Length(14),
+        Constraint::Length(8),
         Constraint::Length(8),
         Constraint::Length(8),
         Constraint::Length(6),
@@ -423,7 +570,7 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(Style::default().fg(Color::Yellow))
+                .thumb_style(if is_focused { Style::default().fg(Color::Yellow) } else { Style::default().fg(Color::DarkGray) })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -432,6 +579,13 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
 }
 
 fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: Rect) {
+    let is_focused = matches!(app.focus, FocusPanel::Processes);
+    let border_style = if is_focused {
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+
     let filter_info = if let Some(ref user) = app.filter_user {
         format!("[User:{}]", user)
     } else if let Some(pid) = app.filter_pid {
@@ -445,6 +599,7 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
+        .border_style(border_style)
         .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
 
     let inner = block.inner(area);
@@ -542,7 +697,7 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(Style::default().fg(Color::Cyan))
+                .thumb_style(if is_focused { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -551,11 +706,12 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
 }
 
 fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
+    let focus_indicator = format!("[{:?}]", app.focus);
     let status_text = match app.mode {
-        AppMode::Normal => " q:Quit u:User p:PID c:Clear s:Sort ↑↓:Nav h:Help ",
-        AppMode::FilterUser => &format!(" User: {} [Enter=OK, Esc=Cancel]", app.input_buffer),
-        AppMode::FilterPid => &format!(" PID: {} [Enter=OK, Esc=Cancel]", app.input_buffer),
-        AppMode::Help => " Press any key to close ",
+        AppMode::Normal => format!("{} q:Quit Tab:Focus ↑↓:Scroll u:User p:PID c:Clear s:Sort h:Help", focus_indicator),
+        AppMode::FilterUser => format!(" User: {} [Enter=OK, Esc=Cancel]", app.input_buffer),
+        AppMode::FilterPid => format!(" PID: {} [Enter=OK, Esc=Cancel]", app.input_buffer),
+        AppMode::Help => " Press any key to close ".to_string(),
     };
 
     let style = match app.mode {
@@ -583,20 +739,24 @@ pub fn draw_help(f: &mut Frame) {
         Line::from(""),
         Line::from(vec![Span::styled("ntop", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)), Span::raw(" - Network & Disk I/O Monitor")]),
         Line::from(""),
-        Line::from(vec![Span::styled("Navigation", Style::default().add_modifier(Modifier::BOLD))]),
-        Line::from("  ↑/k    Move up        ↓/j    Move down"),
+        Line::from(vec![Span::styled("Focus Panels (Tab to cycle)", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from("  Tab       Cycle focus: Network → Disk I/O → Disk Usage → Processes"),
+        Line::from("  ↑/↓       Scroll the focused panel"),
+        Line::from(""),
+        Line::from(vec![Span::styled("Navigation (Processes)", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from("  ↑/k       Move up        ↓/j    Move down"),
         Line::from(""),
         Line::from(vec![Span::styled("Filtering", Style::default().add_modifier(Modifier::BOLD))]),
-        Line::from("  u      Filter by username"),
-        Line::from("  p      Filter by PID"),
-        Line::from("  c      Clear filter"),
+        Line::from("  u         Filter by username"),
+        Line::from("  p         Filter by PID"),
+        Line::from("  c         Clear filter"),
         Line::from(""),
         Line::from(vec![Span::styled("Sorting", Style::default().add_modifier(Modifier::BOLD))]),
-        Line::from("  s      Cycle: CPU% → MEM% → READ → WRITE → CONN → PID"),
+        Line::from("  s         Cycle: CPU% → MEM% → READ → WRITE → CONN → PID"),
         Line::from(""),
         Line::from(vec![Span::styled("General", Style::default().add_modifier(Modifier::BOLD))]),
-        Line::from("  h/?    Show help"),
-        Line::from("  q      Quit"),
+        Line::from("  h/?       Show help"),
+        Line::from("  q         Quit"),
         Line::from(""),
         Line::from(Span::styled("  Press any key to close", Style::default().fg(Color::Yellow))),
     ];

@@ -16,7 +16,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use network::NetworkCollector;
 use disk::DiskCollector;
 use process::ProcessCollector;
-use ui::{App, AppMode, draw, draw_help};
+use ui::{App, AppMode, FocusPanel, draw, draw_help};
 
 fn main() -> Result<()> {
     enable_raw_mode()?;
@@ -87,16 +87,52 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
                                 KeyCode::Char('s') => {
                                     app.cycle_sort();
                                 }
+                                KeyCode::Tab => {
+                                    app.cycle_focus();
+                                }
                                 KeyCode::Down | KeyCode::Char('j') => {
-                                    let total = process_deltas.len().max(1);
-                                    app.next(total);
-                                    let visible = terminal.size()?.height.saturating_sub(24) as usize;
-                                    app.scroll_down(visible);
+                                    let term_height = terminal.size()?.height as usize;
+                                    match app.focus {
+                                        FocusPanel::Network => {
+                                            let visible = (term_height / 4).max(3);
+                                            app.scroll_down(visible, net_stats.len());
+                                        }
+                                        FocusPanel::DiskIo => {
+                                            let visible = (term_height / 4).max(3);
+                                            app.scroll_down(visible, disk_deltas.len());
+                                        }
+                                        FocusPanel::DiskUsage => {
+                                            let visible = (term_height / 2).max(5);
+                                            app.scroll_down(visible, disk_usage.len());
+                                        }
+                                        FocusPanel::Processes => {
+                                            let visible = term_height.saturating_sub(10);
+                                            app.next(process_deltas.len().max(1));
+                                            app.scroll_down(visible, process_deltas.len());
+                                        }
+                                    }
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
-                                    let total = process_deltas.len().max(1);
-                                    app.previous(total);
-                                    app.scroll_up();
+                                    let term_height = terminal.size()?.height as usize;
+                                    match app.focus {
+                                        FocusPanel::Network => {
+                                            let visible = (term_height / 4).max(3);
+                                            app.scroll_up(visible, net_stats.len());
+                                        }
+                                        FocusPanel::DiskIo => {
+                                            let visible = (term_height / 4).max(3);
+                                            app.scroll_up(visible, disk_deltas.len());
+                                        }
+                                        FocusPanel::DiskUsage => {
+                                            let visible = (term_height / 2).max(5);
+                                            app.scroll_up(visible, disk_usage.len());
+                                        }
+                                        FocusPanel::Processes => {
+                                            let visible = term_height.saturating_sub(10);
+                                            app.previous(process_deltas.len().max(1));
+                                            app.scroll_up(visible, process_deltas.len());
+                                        }
+                                    }
                                 }
                                 KeyCode::Esc => {
                                     app.filter_user = None;
