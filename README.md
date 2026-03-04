@@ -1,6 +1,7 @@
 # ntop
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Crates.io](https://img.shields.io/crates/v/ntop.svg)](https://crates.io/crates/ntop)
 ![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
 
 <img src="img/snapshot.png" alt="ntop Screenshot" width="50%" height="50%">
@@ -23,6 +24,38 @@ A real-time system resource monitor for Linux, inspired by htop but focused on n
 
 ## Installation
 
+### From crates.io
+
+```bash
+cargo install ntop
+```
+
+### From GitHub Release
+
+Download pre-built binaries from [GitHub Releases](https://github.com/WangLabCSU/ntop/releases/latest):
+
+```bash
+# Download for x86_64 Linux (glibc)
+wget https://github.com/WangLabCSU/ntop/releases/download/v0.1.1/ntop-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf ntop-x86_64-unknown-linux-gnu.tar.gz
+sudo mv ntop /usr/local/bin/
+```
+
+**Available builds:**
+
+| Build | Target | Size | Best For |
+|-------|--------|------|----------|
+| `ntop-x86_64-unknown-linux-gnu.tar.gz` | x86_64, glibc | ~439 KB | Most modern Linux distros (Ubuntu, Debian, Fedora, etc.) |
+| `ntop-x86_64-unknown-linux-musl.tar.gz` | x86_64, musl | ~487 KB | Static binary, works on any Linux including Alpine |
+| `ntop-aarch64-unknown-linux-gnu.tar.gz` | ARM64, glibc | ~406 KB | ARM64 servers (AWS Graviton, Raspberry Pi 4, etc.) |
+| `ntop-aarch64-unknown-linux-musl.tar.gz` | ARM64, musl | ~451 KB | Static ARM64 binary for minimal containers |
+
+**Build variants explained:**
+- **gnu**: Linked against glibc, smaller binary, requires compatible glibc version
+- **musl**: Statically linked with musl libc, larger but self-contained, works anywhere
+- **x86_64**: Standard 64-bit Intel/AMD processors
+- **aarch64**: ARM 64-bit processors (cloud instances, ARM servers, modern ARM boards)
+
 ### From Source
 
 ```bash
@@ -34,7 +67,7 @@ sudo cp target/release/ntop /usr/local/bin/
 
 ### Prerequisites
 
-- Rust 1.70 or higher
+- Rust 1.70 or higher (only for building from source)
 - Linux kernel 2.6.33+ (for `/proc/diskstats` support)
 
 ## Usage
