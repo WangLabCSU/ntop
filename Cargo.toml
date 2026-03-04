@@ -2,10 +2,28 @@
 name = "ntop"
 version = "0.1.0"
 edition = "2021"
+authors = ["WangLabCSU <your-email@example.com>"]
+description = "A real-time system resource monitor for Linux, focused on network and disk I/O"
+license = "MIT"
+repository = "https://github.com/WangLabCSU/ntop"
+homepage = "https://github.com/WangLabCSU/ntop"
+documentation = "https://docs.rs/ntop"
+readme = "README.md"
+keywords = ["system-monitor", "network", "disk-io", "htop", "tui"]
+categories = ["command-line-utilities", "system-monitoring"]
+exclude = [
+    ".github/*",
+    "target/*",
+    "*.md",
+]
 
 [[bin]]
 name = "ntop"
 path = "src/main.rs"
+
+[lib]
+name = "ntop"
+path = "src/lib.rs"
 
 [dependencies]
 ratatui = "0.29"
@@ -14,3 +32,11 @@ tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 users = "0.11"
 libc = "0.2"
+
+[dev-dependencies]
+# Add test dependencies here if needed
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

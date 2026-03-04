@@ -77,22 +77,32 @@ impl NetworkCollector {
         let current_stats = Self::read_dev_stats()?;
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(self.last_time).as_secs_f64();
+        let is_first_run = self.last_stats.is_empty();
         
         let mut deltas = Vec::new();
         
-        if elapsed > 0.0 {
-            for current in &current_stats {
-                if let Some(last) = self.last_stats.iter().find(|s| s.interface == current.interface) {
-                    let delta = NetworkStatsDelta {
-                        interface: current.interface.clone(),
-                        rx_bytes_sec: (current.rx_bytes.saturating_sub(last.rx_bytes)) as f64 / elapsed,
-                        tx_bytes_sec: (current.tx_bytes.saturating_sub(last.tx_bytes)) as f64 / elapsed,
-                        rx_packets_sec: (current.rx_packets.saturating_sub(last.rx_packets)) as f64 / elapsed,
-                        tx_packets_sec: (current.tx_packets.saturating_sub(last.tx_packets)) as f64 / elapsed,
-                    };
-                    deltas.push(delta);
-                }
-            }
+        // Always return all interfaces, with 0 rates on first run
+        for current in &current_stats {
+            let (rx_sec, tx_sec, rx_pkt_sec, tx_pkt_sec) = if is_first_run || elapsed <= 0.0 {
+                (0.0, 0.0, 0.0, 0.0)
+            } else if let Some(last) = self.last_stats.iter().find(|s| s.interface == current.interface) {
+                (
+                    (current.rx_bytes.saturating_sub(last.rx_bytes)) as f64 / elapsed,
+                    (current.tx_bytes.saturating_sub(last.tx_bytes)) as f64 / elapsed,
+                    (current.rx_packets.saturating_sub(last.rx_packets)) as f64 / elapsed,
+                    (current.tx_packets.saturating_sub(last.tx_packets)) as f64 / elapsed,
+                )
+            } else {
+                (0.0, 0.0, 0.0, 0.0)
+            };
+            
+            deltas.push(NetworkStatsDelta {
+                interface: current.interface.clone(),
+                rx_bytes_sec: rx_sec,
+                tx_bytes_sec: tx_sec,
+                rx_packets_sec: rx_pkt_sec,
+                tx_packets_sec: tx_pkt_sec,
+            });
         }
         
         self.last_stats = current_stats.clone();

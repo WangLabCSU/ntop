@@ -232,29 +232,41 @@ impl DiskCollector {
         let current_io = Self::read_disk_io_stats()?;
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(self.last_time).as_secs_f64();
+        let is_first_run = self.last_io_stats.is_empty();
 
         let mut deltas = Vec::new();
 
-        if elapsed > 0.0 {
-            for current in &current_io {
-                if let Some(last) = self.last_io_stats.get(&current.device) {
-                    let sector_size = 512.0_f64;
-                    let read_bytes = (current.sectors_read.saturating_sub(last.sectors_read)) as f64 * sector_size;
-                    let write_bytes = (current.sectors_written.saturating_sub(last.sectors_written)) as f64 * sector_size;
-                    let reads = current.reads_completed.saturating_sub(last.reads_completed) as f64;
-                    let writes = current.writes_completed.saturating_sub(last.writes_completed) as f64;
-                    let io_time = current.io_time_ms.saturating_sub(last.io_time_ms) as f64;
+        // Always return all devices, with 0 rates on first run
+        for current in &current_io {
+            let (read_sec, write_sec, rd_iops, wr_iops, util) = if is_first_run || elapsed <= 0.0 {
+                (0.0, 0.0, 0.0, 0.0, 0.0)
+            } else if let Some(last) = self.last_io_stats.get(&current.device) {
+                let sector_size = 512.0_f64;
+                let read_bytes = (current.sectors_read.saturating_sub(last.sectors_read)) as f64 * sector_size;
+                let write_bytes = (current.sectors_written.saturating_sub(last.sectors_written)) as f64 * sector_size;
+                let reads = current.reads_completed.saturating_sub(last.reads_completed) as f64;
+                let writes = current.writes_completed.saturating_sub(last.writes_completed) as f64;
+                let io_time = current.io_time_ms.saturating_sub(last.io_time_ms) as f64;
+                
+                (
+                    read_bytes / elapsed,
+                    write_bytes / elapsed,
+                    reads / elapsed,
+                    writes / elapsed,
+                    (io_time / 1000.0 / elapsed * 100.0).min(100.0),
+                )
+            } else {
+                (0.0, 0.0, 0.0, 0.0, 0.0)
+            };
 
-                    deltas.push(DiskIoDelta {
-                        device: current.device.clone(),
-                        read_bytes_sec: read_bytes / elapsed,
-                        write_bytes_sec: write_bytes / elapsed,
-                        read_iops: reads / elapsed,
-                        write_iops: writes / elapsed,
-                        io_util: (io_time / 1000.0 / elapsed * 100.0).min(100.0),
-                    });
-                }
-            }
+            deltas.push(DiskIoDelta {
+                device: current.device.clone(),
+                read_bytes_sec: read_sec,
+                write_bytes_sec: write_sec,
+                read_iops: rd_iops,
+                write_iops: wr_iops,
+                io_util: util,
+            });
         }
 
         self.last_io_stats.clear();
