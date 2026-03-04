@@ -90,7 +90,7 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
                                 KeyCode::Down | KeyCode::Char('j') => {
                                     let total = process_deltas.len().max(1);
                                     app.next(total);
-                                    let visible = terminal.size()?.height.saturating_sub(20) as usize;
+                                    let visible = terminal.size()?.height.saturating_sub(24) as usize;
                                     app.scroll_down(visible);
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {

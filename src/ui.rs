@@ -132,12 +132,12 @@ pub fn draw(f: &mut Frame, app: &mut App, net_stats: &[NetworkStats], net_deltas
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2),
-            Constraint::Length(5),
-            Constraint::Length(5),
-            Constraint::Length(4),
-            Constraint::Min(8),
-            Constraint::Length(1),
+            Constraint::Length(2),   // Header
+            Constraint::Length(8),   // Network (was 5)
+            Constraint::Length(8),   // Disk I/O (was 5)
+            Constraint::Length(6),   // Disk Usage (was 4)
+            Constraint::Min(10),     // Processes (was 8)
+            Constraint::Length(1),   // Status bar
         ])
         .split(f.area());
 
