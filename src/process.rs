@@ -4,6 +4,7 @@ use std::fs;
 use users::get_user_by_uid;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub name: String,
@@ -20,6 +21,7 @@ pub struct ProcessInfo {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct ProcessDelta {
     pub pid: u32,
     pub name: String,
@@ -40,6 +42,12 @@ pub struct ProcessCollector {
     clock_tick: u64,
 }
 
+impl Default for ProcessCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProcessCollector {
     pub fn new() -> Self {
         Self {
@@ -58,7 +66,7 @@ impl ProcessCollector {
                     return line
                         .split(':')
                         .nth(1)
-                        .and_then(|s| s.trim().split_whitespace().next())
+                        .and_then(|s| s.split_whitespace().next())
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(0);
                 }

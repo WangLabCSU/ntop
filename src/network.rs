@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct NetworkStats {
     pub interface: String,
     pub rx_bytes: u64,
@@ -16,6 +17,7 @@ pub struct NetworkStats {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct NetworkStatsDelta {
     pub interface: String,
     pub rx_bytes_sec: f64,
@@ -27,6 +29,12 @@ pub struct NetworkStatsDelta {
 pub struct NetworkCollector {
     last_stats: Vec<NetworkStats>,
     last_time: std::time::Instant,
+}
+
+impl Default for NetworkCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NetworkCollector {

@@ -24,6 +24,7 @@ pub struct DiskIoStats {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct DiskIoDelta {
     pub device: String,
     pub read_bytes_sec: f64,
@@ -36,6 +37,12 @@ pub struct DiskIoDelta {
 pub struct DiskCollector {
     last_io_stats: HashMap<String, DiskIoStats>,
     last_time: std::time::Instant,
+}
+
+impl Default for DiskCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DiskCollector {
@@ -145,10 +152,10 @@ impl DiskCollector {
         }
 
         let stat = unsafe { stat.assume_init() };
-        let block_size = stat.f_frsize as u64;
-        let total_blocks = stat.f_blocks as u64;
-        let free_blocks = stat.f_bfree as u64;
-        let avail_blocks = stat.f_bavail as u64;
+        let block_size = stat.f_frsize;
+        let total_blocks = stat.f_blocks;
+        let free_blocks = stat.f_bfree;
+        let avail_blocks = stat.f_bavail;
 
         let total_bytes = block_size * total_blocks;
         let free_bytes = block_size * free_blocks;
@@ -347,6 +354,7 @@ pub fn format_bytes_per_sec(bytes_sec: f64) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub fn format_iops(iops: f64) -> String {
     if iops >= 1000.0 {
         format!("{:.1}k", iops / 1000.0)

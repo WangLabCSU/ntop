@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::fs;
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct NfsMount {
     pub server: String,
     pub path: String,
@@ -19,6 +20,7 @@ pub struct NfsStats {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct NfsStatsDelta {
     pub mount_point: String,
     pub read_ops_sec: f64,
@@ -30,6 +32,12 @@ pub struct NfsStatsDelta {
 pub struct NfsCollector {
     last_stats: Vec<NfsStats>,
     last_time: std::time::Instant,
+}
+
+impl Default for NfsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NfsCollector {

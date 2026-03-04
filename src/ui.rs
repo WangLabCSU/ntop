@@ -81,6 +81,12 @@ pub struct App {
     pub process_horizontal_scroll: usize, // For horizontal scrolling in processes table
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     pub fn new() -> Self {
         Self {
@@ -220,6 +226,7 @@ impl App {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     f: &mut Frame,
     app: &mut App,
@@ -843,8 +850,8 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
 
     // Distribute remaining width to mount point (60%) and source (40%) columns
     // Give mount point more space as it's usually longer
-    let mount_width = (remaining_width * 6 / 10).max(15).min(50);
-    let source_width = (remaining_width * 4 / 10).max(10).min(35);
+    let mount_width = (remaining_width * 6 / 10).clamp(15, 50);
+    let source_width = (remaining_width * 4 / 10).clamp(10, 35);
 
     let rows: Vec<Row> = real_usage
         .iter()
@@ -1342,7 +1349,11 @@ fn draw_process_detail(f: &mut Frame, pid: u32) {
             if line.starts_with("PPid:") {
                 ppid = line.split_whitespace().nth(1).unwrap_or("-").to_string();
             } else if line.starts_with("State:") {
-                state = line.splitn(2, ':').nth(1).unwrap_or("-").trim().to_string();
+                state = line
+                    .split_once(':')
+                    .map(|x| x.1.trim())
+                    .unwrap_or("-")
+                    .to_string();
             } else if line.starts_with("Uid:") {
                 uid = line.split_whitespace().nth(1).unwrap_or("-").to_string();
             } else if line.starts_with("Gid:") {
