@@ -2,6 +2,8 @@ pub mod disk;
 pub mod network;
 pub mod process;
 pub mod ui;
+pub mod nfs;
+pub mod system;
 
 #[cfg(test)]
 mod tests {
@@ -95,6 +97,7 @@ mod tests {
             write_bytes_sec: 512.0 * 1024.0,  // 512 KB/s
             cpu_percent: 25.5,
             mem_percent: 10.0,
+            state: "Running".to_string(),
         };
         
         assert_eq!(delta.pid, 1234);
@@ -107,11 +110,11 @@ mod tests {
     fn test_sort_by_enum() {
         use ui::SortBy;
         
-        assert_eq!(SortBy::Cpu.name(), "CPU");
-        assert_eq!(SortBy::Mem.name(), "MEM");
-        assert_eq!(SortBy::ReadIO.name(), "DiskRd");
-        assert_eq!(SortBy::WriteIO.name(), "DiskWr");
-        assert_eq!(SortBy::Connections.name(), "Conns");
+        assert_eq!(SortBy::Cpu.name(), "CPU%");
+        assert_eq!(SortBy::Mem.name(), "MEM%");
+        assert_eq!(SortBy::ReadIO.name(), "READ");
+        assert_eq!(SortBy::WriteIO.name(), "WRITE");
+        assert_eq!(SortBy::Connections.name(), "CONN");
         assert_eq!(SortBy::Pid.name(), "PID");
     }
 

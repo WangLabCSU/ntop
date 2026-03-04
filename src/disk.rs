@@ -60,6 +60,7 @@ impl DiskCollector {
             let filesystem = parts[0].to_string();
             let mount_point = parts[1].to_string();
 
+            // Skip virtual filesystems
             if filesystem.starts_with("tmpfs")
                 || filesystem.starts_with("devtmpfs")
                 || filesystem.starts_with("cgroup")
@@ -77,11 +78,14 @@ impl DiskCollector {
                 || filesystem.starts_with("devpts")
                 || filesystem.starts_with("autofs")
                 || filesystem.starts_with("binfmt_misc")
-                || filesystem.starts_with("snap")
+                || filesystem.starts_with("/dev/loop")
                 || mount_point.starts_with("/sys")
                 || mount_point.starts_with("/proc")
                 || mount_point.starts_with("/dev/.")
                 || mount_point == "/run"
+                // Skip snap bind mounts
+                || mount_point.contains("/snap/")
+                || mount_point.contains("/var/snap/")
             {
                 continue;
             }

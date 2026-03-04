@@ -2,6 +2,8 @@ mod network;
 mod disk;
 mod process;
 mod ui;
+mod nfs;
+mod system;
 
 use std::io;
 use std::time::{Duration, Instant};
@@ -16,6 +18,8 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use network::NetworkCollector;
 use disk::DiskCollector;
 use process::ProcessCollector;
+use nfs::NfsCollector;
+use system::SystemInfo;
 use ui::{App, AppMode, FocusPanel, draw, draw_help};
 
 fn main() -> Result<()> {
@@ -47,12 +51,16 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
     let mut net_collector = NetworkCollector::new();
     let mut disk_collector = DiskCollector::new();
     let mut proc_collector = ProcessCollector::new();
+    let mut nfs_collector = NfsCollector::new();
 
     let mut net_stats = Vec::new();
     let mut net_deltas = Vec::new();
     let mut disk_usage = Vec::new();
     let mut disk_deltas = Vec::new();
-    let mut process_deltas = Vec::new();
+    let mut nfs_stats = Vec::new();
+    let mut nfs_deltas = Vec::new();
+    let mut process_deltas: Vec<process::ProcessDelta> = Vec::new();
+    let mut system_info = SystemInfo::default();
 
     let mut last_data_update = Instant::now();
     let data_update_interval = Duration::from_millis(500);
@@ -87,8 +95,19 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
                                 KeyCode::Char('s') => {
                                     app.cycle_sort();
                                 }
+                                KeyCode::Char('t') => {
+                                    app.mode = AppMode::UserStats;
+                                }
                                 KeyCode::Tab => {
                                     app.cycle_focus();
+                                }
+                                KeyCode::Enter => {
+                                    if app.focus == FocusPanel::Processes && !process_deltas.is_empty() {
+                                        if let Some(process) = process_deltas.get(app.selected_index) {
+                                            app.selected_process_pid = Some(process.pid);
+                                            app.mode = AppMode::ProcessDetail;
+                                        }
+                                    }
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
                                     let term_height = terminal.size()?.height as usize;
@@ -96,6 +115,10 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
                                         FocusPanel::Network => {
                                             let visible = (term_height / 4).max(3);
                                             app.scroll_down(visible, net_stats.len());
+                                        }
+                                        FocusPanel::Nfs => {
+                                            let visible = (term_height / 4).max(3);
+                                            app.scroll_down(visible, nfs_stats.len());
                                         }
                                         FocusPanel::DiskIo => {
                                             let visible = (term_height / 4).max(3);
@@ -119,6 +142,10 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
                                             let visible = (term_height / 4).max(3);
                                             app.scroll_up(visible, net_stats.len());
                                         }
+                                        FocusPanel::Nfs => {
+                                            let visible = (term_height / 4).max(3);
+                                            app.scroll_up(visible, nfs_stats.len());
+                                        }
                                         FocusPanel::DiskIo => {
                                             let visible = (term_height / 4).max(3);
                                             app.scroll_up(visible, disk_deltas.len());
@@ -132,6 +159,16 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
                                             app.previous(process_deltas.len().max(1));
                                             app.scroll_up(visible, process_deltas.len());
                                         }
+                                    }
+                                }
+                                KeyCode::Left => {
+                                    if app.focus == FocusPanel::Processes {
+                                        app.scroll_horizontal(-3, 20);
+                                    }
+                                }
+                                KeyCode::Right | KeyCode::Char('l') => {
+                                    if app.focus == FocusPanel::Processes {
+                                        app.scroll_horizontal(3, 20);
                                     }
                                 }
                                 KeyCode::Esc => {
@@ -193,6 +230,13 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
                         AppMode::Help => {
                             app.mode = AppMode::Normal;
                         }
+                        AppMode::ProcessDetail => {
+                            app.mode = AppMode::Normal;
+                            app.selected_process_pid = None;
+                        }
+                        AppMode::UserStats => {
+                            app.mode = AppMode::Normal;
+                        }
                     }
                 }
             }
@@ -200,6 +244,11 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
 
         if should_update_data {
             last_data_update = now;
+
+            // 更新系统信息
+            if let Ok(info) = SystemInfo::collect() {
+                system_info = info;
+            }
 
             if let Ok((stats, deltas)) = net_collector.collect() {
                 net_stats = stats;
@@ -209,6 +258,11 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
             if let Ok((usage, deltas)) = disk_collector.collect() {
                 disk_usage = usage;
                 disk_deltas = deltas;
+            }
+
+            if let Ok((stats, deltas)) = nfs_collector.collect() {
+                nfs_stats = stats;
+                nfs_deltas = deltas;
             }
 
             if let Ok(deltas) = proc_collector.collect_delta() {
@@ -223,7 +277,7 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
         }
 
         terminal.draw(|f| {
-            draw(f, &mut app, &net_stats, &net_deltas, &disk_usage, &disk_deltas, &mut process_deltas);
+            draw(f, &mut app, &system_info, &net_stats, &net_deltas, &disk_usage, &disk_deltas, &nfs_stats, &nfs_deltas, &mut process_deltas);
             if app.mode == AppMode::Help {
                 draw_help(f);
             }

@@ -30,3 +30,5 @@ doc/
 # Temporary files
 *.tmp
 *.temp
+
+test_display

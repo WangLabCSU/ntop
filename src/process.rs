@@ -16,6 +16,7 @@ pub struct ProcessInfo {
     pub write_bytes_sec: f64,
     pub cpu_percent: f64,
     pub mem_percent: f64,
+    pub state: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -28,6 +29,7 @@ pub struct ProcessDelta {
     pub write_bytes_sec: f64,
     pub cpu_percent: f64,
     pub mem_percent: f64,
+    pub state: String,
 }
 
 pub struct ProcessCollector {
@@ -145,17 +147,34 @@ impl ProcessCollector {
         pids
     }
 
-    fn get_process_stat(pid: u32) -> (u64, u64, u64) {
+    fn get_process_stat(pid: u32) -> (u64, u64, u64, String) {
         if let Ok(content) = fs::read_to_string(format!("/proc/{}/stat", pid)) {
             let parts: Vec<&str> = content.split_whitespace().collect();
             if parts.len() >= 17 {
                 let utime: u64 = parts[13].parse().unwrap_or(0);
                 let stime: u64 = parts[14].parse().unwrap_or(0);
                 let rss: u64 = parts[23].parse().unwrap_or(0);
-                return (utime, stime, rss);
+                // Process state is at index 2 (after pid and comm)
+                let state = parts.get(2).unwrap_or(&"?").to_string();
+                return (utime, stime, rss, state);
             }
         }
-        (0, 0, 0)
+        (0, 0, 0, "?".to_string())
+    }
+
+    fn format_state(state: &str) -> &'static str {
+        match state {
+            "R" => "Running",
+            "S" => "Sleeping",
+            "D" => "Disk Sleep",
+            "T" => "Stopped",
+            "t" => "Tracing Stop",
+            "X" => "Dead",
+            "Z" => "Zombie",
+            "P" => "Parked",
+            "I" => "Idle",
+            _ => "Unknown",
+        }
     }
 
     pub fn collect(&mut self) -> Result<Vec<ProcessInfo>> {
@@ -170,7 +189,8 @@ impl ProcessCollector {
             let (user, uid) = Self::get_process_user(pid);
             let (read_bytes, write_bytes) = Self::get_process_io(pid);
             let connections = Self::get_socket_connections(pid);
-            let (utime, stime, rss) = Self::get_process_stat(pid);
+            let (utime, stime, rss, state_code) = Self::get_process_stat(pid);
+            let state = Self::format_state(&state_code);
 
             let (read_sec, write_sec) = if elapsed > 0.0 {
                 if let Some(&(last_read, last_write)) = self.last_io.get(&pid) {
@@ -192,11 +212,20 @@ impl ProcessCollector {
                 0.0
             };
 
+            // Calculate CPU percentage
+            // utime and stime are in clock ticks
+            // Formula: (delta_ticks / clock_tick) / elapsed_time * 100
+            // This gives percentage of one CPU core. For multi-threaded processes,
+            // this can exceed 100% (e.g., 400% means using 4 cores fully)
             let cpu_percent = if let Some((last_utime, last_stime, last_time)) = self.last_cpu.get(&pid) {
                 let time_elapsed = now.duration_since(*last_time).as_secs_f64();
                 if time_elapsed > 0.0 && self.clock_tick > 0 {
-                    let delta_time = (utime.saturating_sub(*last_utime) + stime.saturating_sub(*last_stime)) as f64;
-                    (delta_time / self.clock_tick as f64) / time_elapsed * 100.0
+                    let delta_utime = utime.saturating_sub(*last_utime) as f64;
+                    let delta_stime = stime.saturating_sub(*last_stime) as f64;
+                    let delta_ticks = delta_utime + delta_stime;
+                    // Convert ticks to seconds, then to percentage
+                    let cpu_time = delta_ticks / self.clock_tick as f64;
+                    (cpu_time / time_elapsed) * 100.0
                 } else {
                     0.0
                 }
@@ -217,8 +246,10 @@ impl ProcessCollector {
                 write_bytes,
                 read_bytes_sec: read_sec,
                 write_bytes_sec: write_sec,
-                cpu_percent: cpu_percent.min(100.0 * 32.0),
+                // Cap at a reasonable max (e.g., 64 cores * 100% = 6400%)
+                cpu_percent: cpu_percent.min(6400.0),
                 mem_percent: mem_percent.min(100.0),
+                state: state.to_string(),
             });
         }
 
@@ -243,6 +274,7 @@ impl ProcessCollector {
                 write_bytes_sec: p.write_bytes_sec,
                 cpu_percent: p.cpu_percent,
                 mem_percent: p.mem_percent,
+                state: p.state,
             })
             .collect())
     }
