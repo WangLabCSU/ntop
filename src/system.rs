@@ -1,5 +1,5 @@
-use std::fs;
 use anyhow::Result;
+use std::fs;
 
 #[derive(Debug, Clone, Default)]
 pub struct SystemInfo {

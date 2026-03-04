@@ -1,9 +1,9 @@
-mod network;
 mod disk;
-mod process;
-mod ui;
+mod network;
 mod nfs;
+mod process;
 mod system;
+mod ui;
 
 use std::io;
 use std::time::{Duration, Instant};
@@ -14,13 +14,13 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
-use network::NetworkCollector;
 use disk::DiskCollector;
-use process::ProcessCollector;
+use network::NetworkCollector;
 use nfs::NfsCollector;
+use process::ProcessCollector;
+use ratatui::{backend::CrosstermBackend, Terminal};
 use system::SystemInfo;
-use ui::{App, AppMode, FocusPanel, draw, draw_help};
+use ui::{draw, draw_help, App, AppMode, FocusPanel};
 
 fn main() -> Result<()> {
     enable_raw_mode()?;
@@ -73,160 +73,155 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     match app.mode {
-                        AppMode::Normal => {
-                            match key.code {
-                                KeyCode::Char('q') => return Ok(()),
-                                KeyCode::Char('h') | KeyCode::Char('?') => {
-                                    app.mode = AppMode::Help;
+                        AppMode::Normal => match key.code {
+                            KeyCode::Char('q') => return Ok(()),
+                            KeyCode::Char('h') | KeyCode::Char('?') => {
+                                app.mode = AppMode::Help;
+                            }
+                            KeyCode::Char('u') => {
+                                app.mode = AppMode::FilterUser;
+                                app.input_buffer.clear();
+                            }
+                            KeyCode::Char('p') => {
+                                app.mode = AppMode::FilterPid;
+                                app.input_buffer.clear();
+                            }
+                            KeyCode::Char('c') => {
+                                app.filter_user = None;
+                                app.filter_pid = None;
+                                app.reset_selection();
+                            }
+                            KeyCode::Char('s') => {
+                                app.cycle_sort();
+                            }
+                            KeyCode::Char('t') => {
+                                app.mode = AppMode::UserStats;
+                            }
+                            KeyCode::Tab => {
+                                app.cycle_focus();
+                            }
+                            KeyCode::Enter => {
+                                if app.focus == FocusPanel::Processes && !process_deltas.is_empty()
+                                {
+                                    if let Some(process) = process_deltas.get(app.selected_index) {
+                                        app.selected_process_pid = Some(process.pid);
+                                        app.mode = AppMode::ProcessDetail;
+                                    }
                                 }
-                                KeyCode::Char('u') => {
-                                    app.mode = AppMode::FilterUser;
-                                    app.input_buffer.clear();
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                let term_height = terminal.size()?.height as usize;
+                                match app.focus {
+                                    FocusPanel::Network => {
+                                        let visible = (term_height / 4).max(3);
+                                        app.scroll_down(visible, net_stats.len());
+                                    }
+                                    FocusPanel::Nfs => {
+                                        let visible = (term_height / 4).max(3);
+                                        app.scroll_down(visible, nfs_stats.len());
+                                    }
+                                    FocusPanel::DiskIo => {
+                                        let visible = (term_height / 4).max(3);
+                                        app.scroll_down(visible, disk_deltas.len());
+                                    }
+                                    FocusPanel::DiskUsage => {
+                                        let visible = (term_height / 2).max(5);
+                                        app.scroll_down(visible, disk_usage.len());
+                                    }
+                                    FocusPanel::Processes => {
+                                        let visible = term_height.saturating_sub(10);
+                                        app.next(process_deltas.len().max(1));
+                                        app.scroll_down(visible, process_deltas.len());
+                                    }
                                 }
-                                KeyCode::Char('p') => {
-                                    app.mode = AppMode::FilterPid;
-                                    app.input_buffer.clear();
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                let term_height = terminal.size()?.height as usize;
+                                match app.focus {
+                                    FocusPanel::Network => {
+                                        let visible = (term_height / 4).max(3);
+                                        app.scroll_up(visible, net_stats.len());
+                                    }
+                                    FocusPanel::Nfs => {
+                                        let visible = (term_height / 4).max(3);
+                                        app.scroll_up(visible, nfs_stats.len());
+                                    }
+                                    FocusPanel::DiskIo => {
+                                        let visible = (term_height / 4).max(3);
+                                        app.scroll_up(visible, disk_deltas.len());
+                                    }
+                                    FocusPanel::DiskUsage => {
+                                        let visible = (term_height / 2).max(5);
+                                        app.scroll_up(visible, disk_usage.len());
+                                    }
+                                    FocusPanel::Processes => {
+                                        let visible = term_height.saturating_sub(10);
+                                        app.previous(process_deltas.len().max(1));
+                                        app.scroll_up(visible, process_deltas.len());
+                                    }
                                 }
-                                KeyCode::Char('c') => {
-                                    app.filter_user = None;
+                            }
+                            KeyCode::Left => {
+                                if app.focus == FocusPanel::Processes {
+                                    app.scroll_horizontal(-3, 20);
+                                }
+                            }
+                            KeyCode::Right | KeyCode::Char('l') => {
+                                if app.focus == FocusPanel::Processes {
+                                    app.scroll_horizontal(3, 20);
+                                }
+                            }
+                            KeyCode::Esc => {
+                                app.filter_user = None;
+                                app.filter_pid = None;
+                                app.reset_selection();
+                            }
+                            _ => {}
+                        },
+                        AppMode::FilterUser => match key.code {
+                            KeyCode::Enter => {
+                                if !app.input_buffer.is_empty() {
+                                    app.filter_user = Some(app.input_buffer.clone());
                                     app.filter_pid = None;
-                                    app.reset_selection();
                                 }
-                                KeyCode::Char('s') => {
-                                    app.cycle_sort();
-                                }
-                                KeyCode::Char('t') => {
-                                    app.mode = AppMode::UserStats;
-                                }
-                                KeyCode::Tab => {
-                                    app.cycle_focus();
-                                }
-                                KeyCode::Enter => {
-                                    if app.focus == FocusPanel::Processes && !process_deltas.is_empty() {
-                                        if let Some(process) = process_deltas.get(app.selected_index) {
-                                            app.selected_process_pid = Some(process.pid);
-                                            app.mode = AppMode::ProcessDetail;
-                                        }
-                                    }
-                                }
-                                KeyCode::Down | KeyCode::Char('j') => {
-                                    let term_height = terminal.size()?.height as usize;
-                                    match app.focus {
-                                        FocusPanel::Network => {
-                                            let visible = (term_height / 4).max(3);
-                                            app.scroll_down(visible, net_stats.len());
-                                        }
-                                        FocusPanel::Nfs => {
-                                            let visible = (term_height / 4).max(3);
-                                            app.scroll_down(visible, nfs_stats.len());
-                                        }
-                                        FocusPanel::DiskIo => {
-                                            let visible = (term_height / 4).max(3);
-                                            app.scroll_down(visible, disk_deltas.len());
-                                        }
-                                        FocusPanel::DiskUsage => {
-                                            let visible = (term_height / 2).max(5);
-                                            app.scroll_down(visible, disk_usage.len());
-                                        }
-                                        FocusPanel::Processes => {
-                                            let visible = term_height.saturating_sub(10);
-                                            app.next(process_deltas.len().max(1));
-                                            app.scroll_down(visible, process_deltas.len());
-                                        }
-                                    }
-                                }
-                                KeyCode::Up | KeyCode::Char('k') => {
-                                    let term_height = terminal.size()?.height as usize;
-                                    match app.focus {
-                                        FocusPanel::Network => {
-                                            let visible = (term_height / 4).max(3);
-                                            app.scroll_up(visible, net_stats.len());
-                                        }
-                                        FocusPanel::Nfs => {
-                                            let visible = (term_height / 4).max(3);
-                                            app.scroll_up(visible, nfs_stats.len());
-                                        }
-                                        FocusPanel::DiskIo => {
-                                            let visible = (term_height / 4).max(3);
-                                            app.scroll_up(visible, disk_deltas.len());
-                                        }
-                                        FocusPanel::DiskUsage => {
-                                            let visible = (term_height / 2).max(5);
-                                            app.scroll_up(visible, disk_usage.len());
-                                        }
-                                        FocusPanel::Processes => {
-                                            let visible = term_height.saturating_sub(10);
-                                            app.previous(process_deltas.len().max(1));
-                                            app.scroll_up(visible, process_deltas.len());
-                                        }
-                                    }
-                                }
-                                KeyCode::Left => {
-                                    if app.focus == FocusPanel::Processes {
-                                        app.scroll_horizontal(-3, 20);
-                                    }
-                                }
-                                KeyCode::Right | KeyCode::Char('l') => {
-                                    if app.focus == FocusPanel::Processes {
-                                        app.scroll_horizontal(3, 20);
-                                    }
-                                }
-                                KeyCode::Esc => {
+                                app.mode = AppMode::Normal;
+                                app.input_buffer.clear();
+                                app.reset_selection();
+                            }
+                            KeyCode::Esc => {
+                                app.mode = AppMode::Normal;
+                                app.input_buffer.clear();
+                            }
+                            KeyCode::Backspace => {
+                                app.input_buffer.pop();
+                            }
+                            KeyCode::Char(c) => {
+                                app.input_buffer.push(c);
+                            }
+                            _ => {}
+                        },
+                        AppMode::FilterPid => match key.code {
+                            KeyCode::Enter => {
+                                if let Ok(pid) = app.input_buffer.parse::<u32>() {
+                                    app.filter_pid = Some(pid);
                                     app.filter_user = None;
-                                    app.filter_pid = None;
-                                    app.reset_selection();
                                 }
-                                _ => {}
+                                app.mode = AppMode::Normal;
+                                app.input_buffer.clear();
+                                app.reset_selection();
                             }
-                        }
-                        AppMode::FilterUser => {
-                            match key.code {
-                                KeyCode::Enter => {
-                                    if !app.input_buffer.is_empty() {
-                                        app.filter_user = Some(app.input_buffer.clone());
-                                        app.filter_pid = None;
-                                    }
-                                    app.mode = AppMode::Normal;
-                                    app.input_buffer.clear();
-                                    app.reset_selection();
-                                }
-                                KeyCode::Esc => {
-                                    app.mode = AppMode::Normal;
-                                    app.input_buffer.clear();
-                                }
-                                KeyCode::Backspace => {
-                                    app.input_buffer.pop();
-                                }
-                                KeyCode::Char(c) => {
-                                    app.input_buffer.push(c);
-                                }
-                                _ => {}
+                            KeyCode::Esc => {
+                                app.mode = AppMode::Normal;
+                                app.input_buffer.clear();
                             }
-                        }
-                        AppMode::FilterPid => {
-                            match key.code {
-                                KeyCode::Enter => {
-                                    if let Ok(pid) = app.input_buffer.parse::<u32>() {
-                                        app.filter_pid = Some(pid);
-                                        app.filter_user = None;
-                                    }
-                                    app.mode = AppMode::Normal;
-                                    app.input_buffer.clear();
-                                    app.reset_selection();
-                                }
-                                KeyCode::Esc => {
-                                    app.mode = AppMode::Normal;
-                                    app.input_buffer.clear();
-                                }
-                                KeyCode::Backspace => {
-                                    app.input_buffer.pop();
-                                }
-                                KeyCode::Char(c) if c.is_ascii_digit() => {
-                                    app.input_buffer.push(c);
-                                }
-                                _ => {}
+                            KeyCode::Backspace => {
+                                app.input_buffer.pop();
                             }
-                        }
+                            KeyCode::Char(c) if c.is_ascii_digit() => {
+                                app.input_buffer.push(c);
+                            }
+                            _ => {}
+                        },
                         AppMode::Help => {
                             app.mode = AppMode::Normal;
                         }
@@ -277,7 +272,18 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<(
         }
 
         terminal.draw(|f| {
-            draw(f, &mut app, &system_info, &net_stats, &net_deltas, &disk_usage, &disk_deltas, &nfs_stats, &nfs_deltas, &mut process_deltas);
+            draw(
+                f,
+                &mut app,
+                &system_info,
+                &net_stats,
+                &net_deltas,
+                &disk_usage,
+                &disk_deltas,
+                &nfs_stats,
+                &nfs_deltas,
+                &mut process_deltas,
+            );
             if app.mode == AppMode::Help {
                 draw_help(f);
             }

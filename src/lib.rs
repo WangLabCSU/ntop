@@ -1,9 +1,9 @@
 pub mod disk;
 pub mod network;
-pub mod process;
-pub mod ui;
 pub mod nfs;
+pub mod process;
 pub mod system;
+pub mod ui;
 
 #[cfg(test)]
 mod tests {
@@ -16,7 +16,10 @@ mod tests {
         assert_eq!(disk::format_bytes_size(1024), "1.0K");
         assert_eq!(disk::format_bytes_size(1024 * 1024), "1.0M");
         assert_eq!(disk::format_bytes_size(1024 * 1024 * 1024), "1.0G");
-        assert_eq!(disk::format_bytes_size(1024_u64 * 1024 * 1024 * 1024), "1.0T");
+        assert_eq!(
+            disk::format_bytes_size(1024_u64 * 1024 * 1024 * 1024),
+            "1.0T"
+        );
     }
 
     #[test]
@@ -25,7 +28,10 @@ mod tests {
         assert_eq!(disk::format_bytes_per_sec(512.0), "512 B/s");
         assert_eq!(disk::format_bytes_per_sec(1024.0), "1.0 KB/s");
         assert_eq!(disk::format_bytes_per_sec(1024.0 * 1024.0), "1.0 MB/s");
-        assert_eq!(disk::format_bytes_per_sec(1024.0 * 1024.0 * 1024.0), "1.0 GB/s");
+        assert_eq!(
+            disk::format_bytes_per_sec(1024.0 * 1024.0 * 1024.0),
+            "1.0 GB/s"
+        );
     }
 
     #[test]
@@ -59,7 +65,7 @@ mod tests {
         assert!(!disk::DiskCollector::is_partition("nvme0n1"));
         assert!(!disk::DiskCollector::is_partition("nvme1n1"));
         assert!(!disk::DiskCollector::is_partition("mmcblk0"));
-        
+
         // Partitions
         assert!(disk::DiskCollector::is_partition("sda1"));
         assert!(disk::DiskCollector::is_partition("sda2"));
@@ -80,7 +86,7 @@ mod tests {
             mounted_on: "/home".to_string(),
             device: "sda1".to_string(),
         };
-        
+
         assert_eq!(usage.use_percent, 50.0);
         assert_eq!(disk::format_bytes_size(usage.size), "1.0T");
         assert_eq!(disk::format_bytes_size(usage.used), "512.0G");
@@ -94,22 +100,25 @@ mod tests {
             user: "testuser".to_string(),
             connections: 5,
             read_bytes_sec: 1024.0 * 1024.0, // 1 MB/s
-            write_bytes_sec: 512.0 * 1024.0,  // 512 KB/s
+            write_bytes_sec: 512.0 * 1024.0, // 512 KB/s
             cpu_percent: 25.5,
             mem_percent: 10.0,
             state: "Running".to_string(),
         };
-        
+
         assert_eq!(delta.pid, 1234);
         assert_eq!(delta.connections, 5);
         assert_eq!(disk::format_bytes_per_sec(delta.read_bytes_sec), "1.0 MB/s");
-        assert_eq!(disk::format_bytes_per_sec(delta.write_bytes_sec), "512.0 KB/s");
+        assert_eq!(
+            disk::format_bytes_per_sec(delta.write_bytes_sec),
+            "512.0 KB/s"
+        );
     }
 
     #[test]
     fn test_sort_by_enum() {
         use ui::SortBy;
-        
+
         assert_eq!(SortBy::Cpu.name(), "CPU%");
         assert_eq!(SortBy::Mem.name(), "MEM%");
         assert_eq!(SortBy::ReadIO.name(), "READ");
@@ -121,25 +130,25 @@ mod tests {
     #[test]
     fn test_app_cycle_sort() {
         use ui::{App, SortBy};
-        
+
         let mut app = App::new();
         assert_eq!(app.sort_by, SortBy::Cpu);
-        
+
         app.cycle_sort();
         assert_eq!(app.sort_by, SortBy::Mem);
-        
+
         app.cycle_sort();
         assert_eq!(app.sort_by, SortBy::ReadIO);
-        
+
         app.cycle_sort();
         assert_eq!(app.sort_by, SortBy::WriteIO);
-        
+
         app.cycle_sort();
         assert_eq!(app.sort_by, SortBy::Connections);
-        
+
         app.cycle_sort();
         assert_eq!(app.sort_by, SortBy::Pid);
-        
+
         app.cycle_sort();
         assert_eq!(app.sort_by, SortBy::Cpu);
     }
@@ -147,25 +156,25 @@ mod tests {
     #[test]
     fn test_app_navigation() {
         use ui::App;
-        
+
         let mut app = App::new();
-        
+
         // Test next
         app.next(10);
         assert_eq!(app.selected_index, 1);
-        
+
         app.next(10);
         assert_eq!(app.selected_index, 2);
-        
+
         // Test previous
         app.previous(10);
         assert_eq!(app.selected_index, 1);
-        
+
         // Test wrap around
         app.selected_index = 9;
         app.next(10);
         assert_eq!(app.selected_index, 0);
-        
+
         app.previous(10);
         assert_eq!(app.selected_index, 9);
     }

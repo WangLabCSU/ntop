@@ -1,6 +1,6 @@
-use std::fs;
-use std::collections::HashMap;
 use anyhow::Result;
+use std::collections::HashMap;
+use std::fs;
 
 #[derive(Debug, Clone, Default)]
 pub struct DiskUsage {
@@ -199,15 +199,33 @@ impl DiskCollector {
         // nvme partitions: nvme0n1p1, nvme0n1p2 (not nvme0n1 itself)
         if device.starts_with("nvme") {
             // nvme0n1p1 -> partition, nvme0n1 -> main device
-            return device.contains('p') && 
-                   device.matches('p').count() == 1 &&
-                   device.split('p').nth(1).map(|s| s.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)).unwrap_or(false);
+            return device.contains('p')
+                && device.matches('p').count() == 1
+                && device
+                    .split('p')
+                    .nth(1)
+                    .map(|s| {
+                        s.chars()
+                            .next()
+                            .map(|c| c.is_ascii_digit())
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
         }
         // mmcblk partitions: mmcblk0p1
         if device.starts_with("mmcblk") {
-            return device.contains('p') && 
-                   device.matches('p').count() == 1 &&
-                   device.split('p').nth(1).map(|s| s.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)).unwrap_or(false);
+            return device.contains('p')
+                && device.matches('p').count() == 1
+                && device
+                    .split('p')
+                    .nth(1)
+                    .map(|s| {
+                        s.chars()
+                            .next()
+                            .map(|c| c.is_ascii_digit())
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
         }
         // sdX, hdX, vdX partitions: sda1, sdb2
         let chars: Vec<char> = device.chars().collect();
@@ -246,12 +264,17 @@ impl DiskCollector {
                 (0.0, 0.0, 0.0, 0.0, 0.0)
             } else if let Some(last) = self.last_io_stats.get(&current.device) {
                 let sector_size = 512.0_f64;
-                let read_bytes = (current.sectors_read.saturating_sub(last.sectors_read)) as f64 * sector_size;
-                let write_bytes = (current.sectors_written.saturating_sub(last.sectors_written)) as f64 * sector_size;
+                let read_bytes =
+                    (current.sectors_read.saturating_sub(last.sectors_read)) as f64 * sector_size;
+                let write_bytes = (current.sectors_written.saturating_sub(last.sectors_written))
+                    as f64
+                    * sector_size;
                 let reads = current.reads_completed.saturating_sub(last.reads_completed) as f64;
-                let writes = current.writes_completed.saturating_sub(last.writes_completed) as f64;
+                let writes = current
+                    .writes_completed
+                    .saturating_sub(last.writes_completed) as f64;
                 let io_time = current.io_time_ms.saturating_sub(last.io_time_ms) as f64;
-                
+
                 (
                     read_bytes / elapsed,
                     write_bytes / elapsed,

@@ -1,5 +1,5 @@
-use std::fs;
 use anyhow::Result;
+use std::fs;
 
 #[derive(Debug, Clone, Default)]
 pub struct NfsMount {
@@ -97,11 +97,19 @@ impl NfsCollector {
         // 为每个挂载点创建统计（目前 Linux 不提供每个挂载点的 NFS 统计，只有总体统计）
         // 我们将总体统计分配给每个挂载点，或者如果有多个挂载点，则平均分配
         let mount_count = mounts.len() as u64;
-        let per_mount_read = if mount_count > 0 { total_read_ops / mount_count } else { 0 };
-        let per_mount_write = if mount_count > 0 { total_write_ops / mount_count } else { 0 };
+        let per_mount_read = if mount_count > 0 {
+            total_read_ops / mount_count
+        } else {
+            0
+        };
+        let per_mount_write = if mount_count > 0 {
+            total_write_ops / mount_count
+        } else {
+            0
+        };
 
         // 估算字节数（NFS 通常使用较大的块大小）
-        let avg_read_size: u64 = 64 * 1024;  // 64KB 平均读取大小
+        let avg_read_size: u64 = 64 * 1024; // 64KB 平均读取大小
         let avg_write_size: u64 = 64 * 1024; // 64KB 平均写入大小
 
         for mount in mounts {

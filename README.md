@@ -1,9 +1,9 @@
 # ntop
 
-![ntop Screenshot](img/snapshot.png)
-
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
+
+<img src="img/snapshot.png" alt="ntop Screenshot" width="50%" height="50%">
 
 A real-time system resource monitor for Linux, inspired by htop but focused on network and disk I/O monitoring.
 

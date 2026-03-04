@@ -1,13 +1,20 @@
-use crate::network::{NetworkStats, NetworkStatsDelta, format_bytes_per_sec as net_format_bytes_per_sec};
-use crate::disk::{DiskIoDelta, DiskUsage, format_bytes_per_sec, format_bytes_size};
+use crate::disk::{format_bytes_per_sec, format_bytes_size, DiskIoDelta, DiskUsage};
+use crate::network::{
+    format_bytes_per_sec as net_format_bytes_per_sec, NetworkStats, NetworkStatsDelta,
+};
+use crate::nfs::{
+    format_bytes_per_sec as nfs_format_bytes_per_sec, format_ops_per_sec, NfsStats, NfsStatsDelta,
+};
 use crate::process::ProcessDelta;
-use crate::nfs::{NfsStats, NfsStatsDelta, format_bytes_per_sec as nfs_format_bytes_per_sec, format_ops_per_sec};
 use crate::system::SystemInfo;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Row, Table, Paragraph, Clear, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{
+        Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Table,
+    },
     Frame,
 };
 
@@ -99,12 +106,16 @@ impl App {
     }
 
     pub fn next(&mut self, total: usize) {
-        if total == 0 { return; }
+        if total == 0 {
+            return;
+        }
         self.selected_index = (self.selected_index + 1) % total;
     }
 
     pub fn previous(&mut self, total: usize) {
-        if total == 0 { return; }
+        if total == 0 {
+            return;
+        }
         if self.selected_index > 0 {
             self.selected_index -= 1;
         } else {
@@ -129,7 +140,8 @@ impl App {
                 self.disk_io_scroll = (self.disk_io_scroll + 1).min(total.saturating_sub(visible));
             }
             FocusPanel::DiskUsage => {
-                self.disk_usage_scroll = (self.disk_usage_scroll + 1).min(total.saturating_sub(visible));
+                self.disk_usage_scroll =
+                    (self.disk_usage_scroll + 1).min(total.saturating_sub(visible));
             }
             FocusPanel::Network => {
                 self.network_scroll = (self.network_scroll + 1).min(total.saturating_sub(visible));
@@ -198,15 +210,28 @@ impl App {
 
     pub fn scroll_horizontal(&mut self, direction: i32, max_scroll: usize) {
         if direction > 0 {
-            self.process_horizontal_scroll = (self.process_horizontal_scroll + direction as usize).min(max_scroll);
+            self.process_horizontal_scroll =
+                (self.process_horizontal_scroll + direction as usize).min(max_scroll);
         } else {
-            self.process_horizontal_scroll = self.process_horizontal_scroll.saturating_sub((-direction) as usize);
+            self.process_horizontal_scroll = self
+                .process_horizontal_scroll
+                .saturating_sub((-direction) as usize);
         }
     }
 }
 
-pub fn draw(f: &mut Frame, app: &mut App, system_info: &SystemInfo, net_stats: &[NetworkStats], net_deltas: &[NetworkStatsDelta],
-            disk_usage: &[DiskUsage], disk_deltas: &[DiskIoDelta], nfs_stats: &[NfsStats], nfs_deltas: &[NfsStatsDelta], process_deltas: &mut [ProcessDelta]) {
+pub fn draw(
+    f: &mut Frame,
+    app: &mut App,
+    system_info: &SystemInfo,
+    net_stats: &[NetworkStats],
+    net_deltas: &[NetworkStatsDelta],
+    disk_usage: &[DiskUsage],
+    disk_deltas: &[DiskIoDelta],
+    nfs_stats: &[NfsStats],
+    nfs_deltas: &[NfsStatsDelta],
+    process_deltas: &mut [ProcessDelta],
+) {
     app.total_rx_rate = net_deltas.iter().map(|d| d.rx_bytes_sec).sum();
     app.total_tx_rate = net_deltas.iter().map(|d| d.tx_bytes_sec).sum();
     app.total_disk_read = disk_deltas.iter().map(|d| d.read_bytes_sec).sum();
@@ -220,21 +245,21 @@ pub fn draw(f: &mut Frame, app: &mut App, system_info: &SystemInfo, net_stats: &
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),   // Header with totals
-            Constraint::Min(0),      // Main content (flexible)
-            Constraint::Length(1),   // Status bar
+            Constraint::Length(1), // Header with totals
+            Constraint::Min(0),    // Main content (flexible)
+            Constraint::Length(1), // Status bar
         ])
         .split(area);
 
     // Draw header with system info
     draw_compact_header(f, app, system_info, main_chunks[0]);
-    
+
     // Main content area - split horizontally
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(40),  // Left: System info (Network + Disk)
-            Constraint::Percentage(60),  // Right: Processes
+            Constraint::Percentage(40), // Left: System info (Network + Disk)
+            Constraint::Percentage(60), // Right: Processes
         ])
         .split(main_chunks[1]);
 
@@ -245,10 +270,10 @@ pub fn draw(f: &mut Frame, app: &mut App, system_info: &SystemInfo, net_stats: &
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),   // Network (at least 3 rows)
-                Constraint::Min(3),   // NFS (at least 3 rows)
-                Constraint::Min(3),   // Disk I/O (at least 3 rows)
-                Constraint::Min(5),   // Disk Usage (at least 5 rows, takes remaining)
+                Constraint::Min(3), // Network (at least 3 rows)
+                Constraint::Min(3), // NFS (at least 3 rows)
+                Constraint::Min(3), // Disk I/O (at least 3 rows)
+                Constraint::Min(5), // Disk Usage (at least 5 rows, takes remaining)
             ])
             .split(content_chunks[0])
     } else {
@@ -256,9 +281,9 @@ pub fn draw(f: &mut Frame, app: &mut App, system_info: &SystemInfo, net_stats: &
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(4),   // Network (more space)
-                Constraint::Min(4),   // Disk I/O (more space)
-                Constraint::Min(6),   // Disk Usage (more space, takes remaining)
+                Constraint::Min(4), // Network (more space)
+                Constraint::Min(4), // Disk I/O (more space)
+                Constraint::Min(6), // Disk Usage (more space, takes remaining)
             ])
             .split(content_chunks[0])
     };
@@ -273,10 +298,10 @@ pub fn draw(f: &mut Frame, app: &mut App, system_info: &SystemInfo, net_stats: &
         draw_disk_io_scrollable(f, app, disk_deltas, left_chunks[1]);
         draw_disk_usage_scrollable(f, app, disk_usage, left_chunks[2]);
     }
-    
+
     // Right side - processes
     draw_process_panel(f, app, process_deltas, content_chunks[1]);
-    
+
     // Status bar
     draw_status_bar(f, app, main_chunks[2]);
 
@@ -300,10 +325,26 @@ pub fn draw(f: &mut Frame, app: &mut App, system_info: &SystemInfo, net_stats: &
 
 fn sort_processes(processes: &mut [ProcessDelta], sort_by: &SortBy) {
     match sort_by {
-        SortBy::Cpu => processes.sort_by(|a, b| b.cpu_percent.partial_cmp(&a.cpu_percent).unwrap_or(std::cmp::Ordering::Equal)),
-        SortBy::Mem => processes.sort_by(|a, b| b.mem_percent.partial_cmp(&a.mem_percent).unwrap_or(std::cmp::Ordering::Equal)),
-        SortBy::ReadIO => processes.sort_by(|a, b| b.read_bytes_sec.partial_cmp(&a.read_bytes_sec).unwrap_or(std::cmp::Ordering::Equal)),
-        SortBy::WriteIO => processes.sort_by(|a, b| b.write_bytes_sec.partial_cmp(&a.write_bytes_sec).unwrap_or(std::cmp::Ordering::Equal)),
+        SortBy::Cpu => processes.sort_by(|a, b| {
+            b.cpu_percent
+                .partial_cmp(&a.cpu_percent)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }),
+        SortBy::Mem => processes.sort_by(|a, b| {
+            b.mem_percent
+                .partial_cmp(&a.mem_percent)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }),
+        SortBy::ReadIO => processes.sort_by(|a, b| {
+            b.read_bytes_sec
+                .partial_cmp(&a.read_bytes_sec)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }),
+        SortBy::WriteIO => processes.sort_by(|a, b| {
+            b.write_bytes_sec
+                .partial_cmp(&a.write_bytes_sec)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }),
         SortBy::Connections => processes.sort_by(|a, b| b.connections.cmp(&a.connections)),
         SortBy::Pid => processes.sort_by(|a, b| a.pid.cmp(&b.pid)),
     }
@@ -319,15 +360,23 @@ fn draw_compact_header(f: &mut Frame, app: &App, system_info: &SystemInfo, area:
         format_bytes_per_sec(app.total_disk_write)
     );
 
-    let header = Paragraph::new(header_text)
-        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+    let header =
+        Paragraph::new(header_text).style(Style::default().bg(Color::DarkGray).fg(Color::White));
     f.render_widget(header, area);
 }
 
-fn draw_network_scrollable(f: &mut Frame, app: &mut App, stats: &[NetworkStats], deltas: &[NetworkStatsDelta], area: Rect) {
+fn draw_network_scrollable(
+    f: &mut Frame,
+    app: &mut App,
+    stats: &[NetworkStats],
+    deltas: &[NetworkStatsDelta],
+    area: Rect,
+) {
     let is_focused = matches!(app.focus, FocusPanel::Network);
     let border_style = if is_focused {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Green)
     };
@@ -336,13 +385,20 @@ fn draw_network_scrollable(f: &mut Frame, app: &mut App, stats: &[NetworkStats],
         .title(format!(" Network [{} interfaces] ", stats.len()))
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     if stats.is_empty() {
-        f.render_widget(Paragraph::new("No network interfaces").style(Style::default().fg(Color::Yellow)), inner);
+        f.render_widget(
+            Paragraph::new("No network interfaces").style(Style::default().fg(Color::Yellow)),
+            inner,
+        );
         return;
     }
 
@@ -362,23 +418,43 @@ fn draw_network_scrollable(f: &mut Frame, app: &mut App, stats: &[NetworkStats],
         .map(|(s, d)| {
             Row::new(vec![
                 Cell::from(Span::styled(&s.interface, Style::default().fg(Color::Cyan))),
-                Cell::from(Span::styled(net_format_bytes_per_sec(d.rx_bytes_sec), Style::default().fg(Color::Green))),
-                Cell::from(Span::styled(net_format_bytes_per_sec(d.tx_bytes_sec), Style::default().fg(Color::Red))),
+                Cell::from(Span::styled(
+                    net_format_bytes_per_sec(d.rx_bytes_sec),
+                    Style::default().fg(Color::Green),
+                )),
+                Cell::from(Span::styled(
+                    net_format_bytes_per_sec(d.tx_bytes_sec),
+                    Style::default().fg(Color::Red),
+                )),
             ])
         })
         .collect();
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("Interface", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▼RX/s", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▲TX/s", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled(
+            "Interface",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▼RX/s",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▲TX/s",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )),
     ]);
 
-    let table = Table::new(rows, [
-        Constraint::Length(15),
-        Constraint::Length(12),
-        Constraint::Length(12),
-    ])
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(15),
+            Constraint::Length(12),
+            Constraint::Length(12),
+        ],
+    )
     .header(header)
     .column_spacing(1);
 
@@ -389,18 +465,22 @@ fn draw_network_scrollable(f: &mut Frame, app: &mut App, stats: &[NetworkStats],
         let mut scrollbar_state = ScrollbarState::new(stats.len())
             .position(app.network_scroll)
             .viewport_content_length(visible_rows);
-        
+
         let scrollbar_area = Rect {
             x: inner.x + inner.width.saturating_sub(1),
             y: inner.y + 1,
             width: 1,
             height: inner.height.saturating_sub(2),
         };
-        
+
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(if is_focused { Style::default().fg(Color::Green) } else { Style::default().fg(Color::DarkGray) })
+                .thumb_style(if is_focused {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -408,10 +488,18 @@ fn draw_network_scrollable(f: &mut Frame, app: &mut App, stats: &[NetworkStats],
     }
 }
 
-fn draw_nfs_scrollable(f: &mut Frame, app: &mut App, stats: &[NfsStats], deltas: &[NfsStatsDelta], area: Rect) {
+fn draw_nfs_scrollable(
+    f: &mut Frame,
+    app: &mut App,
+    stats: &[NfsStats],
+    deltas: &[NfsStatsDelta],
+    area: Rect,
+) {
     let is_focused = matches!(app.focus, FocusPanel::Nfs);
     let border_style = if is_focused {
-        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Magenta)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Magenta)
     };
@@ -420,13 +508,20 @@ fn draw_nfs_scrollable(f: &mut Frame, app: &mut App, stats: &[NfsStats], deltas:
         .title(format!(" NFS I/O [{} mounts] ", stats.len()))
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     if stats.is_empty() {
-        f.render_widget(Paragraph::new("No NFS mounts").style(Style::default().fg(Color::Yellow)), inner);
+        f.render_widget(
+            Paragraph::new("No NFS mounts").style(Style::default().fg(Color::Yellow)),
+            inner,
+        );
         return;
     }
 
@@ -445,32 +540,63 @@ fn draw_nfs_scrollable(f: &mut Frame, app: &mut App, stats: &[NfsStats], deltas:
         .take(visible_rows)
         .map(|(s, d)| {
             let mount_name = if s.mount.mount_point.len() > 15 {
-                format!("...{}", &s.mount.mount_point[s.mount.mount_point.len()-12..])
+                format!(
+                    "...{}",
+                    &s.mount.mount_point[s.mount.mount_point.len() - 12..]
+                )
             } else {
                 s.mount.mount_point.clone()
             };
             Row::new(vec![
                 Cell::from(Span::styled(mount_name, Style::default().fg(Color::Cyan))),
-                Cell::from(Span::styled(nfs_format_bytes_per_sec(d.read_bytes_sec), Style::default().fg(Color::Green))),
-                Cell::from(Span::styled(nfs_format_bytes_per_sec(d.write_bytes_sec), Style::default().fg(Color::Red))),
-                Cell::from(Span::styled(format_ops_per_sec(d.read_ops_sec + d.write_ops_sec), Style::default().fg(Color::Yellow))),
+                Cell::from(Span::styled(
+                    nfs_format_bytes_per_sec(d.read_bytes_sec),
+                    Style::default().fg(Color::Green),
+                )),
+                Cell::from(Span::styled(
+                    nfs_format_bytes_per_sec(d.write_bytes_sec),
+                    Style::default().fg(Color::Red),
+                )),
+                Cell::from(Span::styled(
+                    format_ops_per_sec(d.read_ops_sec + d.write_ops_sec),
+                    Style::default().fg(Color::Yellow),
+                )),
             ])
         })
         .collect();
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("Mount", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▼Read/s", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▲Write/s", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Ops/s", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled(
+            "Mount",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▼Read/s",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▲Write/s",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Ops/s",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
     ]);
 
-    let table = Table::new(rows, [
-        Constraint::Length(15),
-        Constraint::Length(10),
-        Constraint::Length(10),
-        Constraint::Length(8),
-    ])
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(15),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(8),
+        ],
+    )
     .header(header)
     .column_spacing(1);
 
@@ -492,7 +618,11 @@ fn draw_nfs_scrollable(f: &mut Frame, app: &mut App, stats: &[NfsStats], deltas:
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(if is_focused { Style::default().fg(Color::Magenta) } else { Style::default().fg(Color::DarkGray) })
+                .thumb_style(if is_focused {
+                    Style::default().fg(Color::Magenta)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -503,7 +633,9 @@ fn draw_nfs_scrollable(f: &mut Frame, app: &mut App, stats: &[NfsStats], deltas:
 fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta], area: Rect) {
     let is_focused = matches!(app.focus, FocusPanel::DiskIo);
     let border_style = if is_focused {
-        Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Blue)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Blue)
     };
@@ -512,19 +644,26 @@ fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta],
         .title(format!(" Disk I/O [{} devices] ", deltas.len()))
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title_style(Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     if deltas.is_empty() {
-        f.render_widget(Paragraph::new("No disk devices").style(Style::default().fg(Color::Yellow)), inner);
+        f.render_widget(
+            Paragraph::new("No disk devices").style(Style::default().fg(Color::Yellow)),
+            inner,
+        );
         return;
     }
 
     let header_height = 1;
     let visible_rows = inner.height.saturating_sub(header_height) as usize;
-    
+
     // Ensure scroll offset is valid
     if app.disk_io_scroll > deltas.len().saturating_sub(visible_rows) {
         app.disk_io_scroll = deltas.len().saturating_sub(visible_rows);
@@ -545,26 +684,51 @@ fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta],
 
             Row::new(vec![
                 Cell::from(Span::styled(&d.device, Style::default().fg(Color::Cyan))),
-                Cell::from(Span::styled(format_bytes_per_sec(d.read_bytes_sec), Style::default().fg(Color::Blue))),
-                Cell::from(Span::styled(format_bytes_per_sec(d.write_bytes_sec), Style::default().fg(Color::Magenta))),
+                Cell::from(Span::styled(
+                    format_bytes_per_sec(d.read_bytes_sec),
+                    Style::default().fg(Color::Blue),
+                )),
+                Cell::from(Span::styled(
+                    format_bytes_per_sec(d.write_bytes_sec),
+                    Style::default().fg(Color::Magenta),
+                )),
                 Cell::from(Span::styled(format!("{:.0}%", d.io_util), util_style)),
             ])
         })
         .collect();
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("Device", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▼Read", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▲Write", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Util", Style::default().add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled(
+            "Device",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▼Read",
+            Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▲Write",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Util",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
     ]);
 
-    let table = Table::new(rows, [
-        Constraint::Length(12),
-        Constraint::Length(10),
-        Constraint::Length(10),
-        Constraint::Length(6),
-    ])
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(12),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(6),
+        ],
+    )
     .header(header)
     .column_spacing(1);
 
@@ -575,18 +739,22 @@ fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta],
         let mut scrollbar_state = ScrollbarState::new(deltas.len())
             .position(app.disk_io_scroll)
             .viewport_content_length(visible_rows);
-        
+
         let scrollbar_area = Rect {
             x: inner.x + inner.width.saturating_sub(1),
             y: inner.y + 1,
             width: 1,
             height: inner.height.saturating_sub(2),
         };
-        
+
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(if is_focused { Style::default().fg(Color::Blue) } else { Style::default().fg(Color::DarkGray) })
+                .thumb_style(if is_focused {
+                    Style::default().fg(Color::Blue)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -597,7 +765,9 @@ fn draw_disk_io_scrollable(f: &mut Frame, app: &mut App, deltas: &[DiskIoDelta],
 fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage], area: Rect) {
     let is_focused = matches!(app.focus, FocusPanel::DiskUsage);
     let border_style = if is_focused {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Yellow)
     };
@@ -607,33 +777,32 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
         .iter()
         .filter(|d| {
             // Only show block devices and NFS mounts
-            let is_block_device = d.filesystem.starts_with("/dev/") || 
-                                  d.filesystem.contains(":");  // NFS
-            let is_not_virtual = !d.filesystem.starts_with("tmpfs") &&
-                                 !d.filesystem.starts_with("devtmpfs") &&
-                                 !d.filesystem.starts_with("cgroup") &&
-                                 !d.filesystem.starts_with("sysfs") &&
-                                 !d.filesystem.starts_with("proc") &&
-                                 !d.filesystem.starts_with("nsfs") &&
-                                 !d.filesystem.starts_with("sunrpc") &&
-                                 !d.filesystem.starts_with("pstore") &&
-                                 !d.filesystem.starts_with("bpf") &&
-                                 !d.filesystem.starts_with("configfs") &&
-                                 !d.filesystem.starts_with("tracefs") &&
-                                 !d.filesystem.starts_with("debugfs") &&
-                                 !d.filesystem.starts_with("securityfs") &&
-                                 !d.filesystem.starts_with("efivarfs") &&
-                                 !d.filesystem.starts_with("fusectl") &&
-                                 !d.filesystem.starts_with("mqueue") &&
-                                 !d.filesystem.starts_with("hugetlbfs") &&
-                                 !d.filesystem.starts_with("ramfs") &&
-                                 !d.filesystem.starts_with("overlay") &&
-                                 !d.filesystem.starts_with("/dev/loop");
-            
+            let is_block_device = d.filesystem.starts_with("/dev/") || d.filesystem.contains(":"); // NFS
+            let is_not_virtual = !d.filesystem.starts_with("tmpfs")
+                && !d.filesystem.starts_with("devtmpfs")
+                && !d.filesystem.starts_with("cgroup")
+                && !d.filesystem.starts_with("sysfs")
+                && !d.filesystem.starts_with("proc")
+                && !d.filesystem.starts_with("nsfs")
+                && !d.filesystem.starts_with("sunrpc")
+                && !d.filesystem.starts_with("pstore")
+                && !d.filesystem.starts_with("bpf")
+                && !d.filesystem.starts_with("configfs")
+                && !d.filesystem.starts_with("tracefs")
+                && !d.filesystem.starts_with("debugfs")
+                && !d.filesystem.starts_with("securityfs")
+                && !d.filesystem.starts_with("efivarfs")
+                && !d.filesystem.starts_with("fusectl")
+                && !d.filesystem.starts_with("mqueue")
+                && !d.filesystem.starts_with("hugetlbfs")
+                && !d.filesystem.starts_with("ramfs")
+                && !d.filesystem.starts_with("overlay")
+                && !d.filesystem.starts_with("/dev/loop");
+
             is_block_device && is_not_virtual && d.size > 0
         })
         .collect();
-    
+
     // Sort by size descending
     real_usage.sort_by(|a, b| b.size.cmp(&a.size));
 
@@ -641,13 +810,20 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
         .title(format!(" Disk Usage [{} filesystems] ", real_usage.len()))
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     if real_usage.is_empty() {
-        f.render_widget(Paragraph::new("No filesystems").style(Style::default().fg(Color::Yellow)), inner);
+        f.render_widget(
+            Paragraph::new("No filesystems").style(Style::default().fg(Color::Yellow)),
+            inner,
+        );
         return;
     }
 
@@ -664,7 +840,7 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
     // Fixed columns: Size(8) + Used(8) + Avail(8) + Use%(6) + spacing(4) = 34
     let fixed_width: usize = 34;
     let remaining_width = available_width.saturating_sub(fixed_width);
-    
+
     // Distribute remaining width to mount point (60%) and source (40%) columns
     // Give mount point more space as it's usually longer
     let mount_width = (remaining_width * 6 / 10).max(15).min(50);
@@ -693,7 +869,10 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
             };
 
             Row::new(vec![
-                Cell::from(Span::styled(mount_display, Style::default().fg(Color::Cyan))),
+                Cell::from(Span::styled(
+                    mount_display,
+                    Style::default().fg(Color::Cyan),
+                )),
                 Cell::from(Span::styled(fs_display, Style::default().fg(Color::Gray))),
                 Cell::from(Span::styled(format_bytes_size(d.size), Style::default())),
                 Cell::from(Span::styled(format_bytes_size(d.used), Style::default())),
@@ -704,22 +883,43 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
         .collect();
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("Mounted On", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Source", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Size", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Used", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Avail", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Use%", Style::default().add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled(
+            "Mounted On",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Source",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Size",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Used",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Avail",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Use%",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
     ]);
 
-    let table = Table::new(rows, [
-        Constraint::Length(mount_width as u16),
-        Constraint::Length(source_width as u16),
-        Constraint::Length(8),
-        Constraint::Length(8),
-        Constraint::Length(8),
-        Constraint::Length(6),
-    ])
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(mount_width as u16),
+            Constraint::Length(source_width as u16),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(6),
+        ],
+    )
     .header(header)
     .column_spacing(1);
 
@@ -730,18 +930,22 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
         let mut scrollbar_state = ScrollbarState::new(real_usage.len())
             .position(app.disk_usage_scroll)
             .viewport_content_length(visible_rows);
-        
+
         let scrollbar_area = Rect {
             x: inner.x + inner.width.saturating_sub(1),
             y: inner.y + 1,
             width: 1,
             height: inner.height.saturating_sub(2),
         };
-        
+
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(if is_focused { Style::default().fg(Color::Yellow) } else { Style::default().fg(Color::DarkGray) })
+                .thumb_style(if is_focused {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -752,7 +956,9 @@ fn draw_disk_usage_scrollable(f: &mut Frame, app: &mut App, usage: &[DiskUsage],
 fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: Rect) {
     let is_focused = matches!(app.focus, FocusPanel::Processes);
     let border_style = if is_focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Cyan)
     };
@@ -772,13 +978,22 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
         String::new()
     };
 
-    let title = format!(" Processes {} Sort:{} {} ", filter_info, app.sort_by.name(), scroll_info);
+    let title = format!(
+        " Processes {} Sort:{} {} ",
+        filter_info,
+        app.sort_by.name(),
+        scroll_info
+    );
 
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -787,7 +1002,10 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
     let visible_rows = inner.height.saturating_sub(header_height) as usize;
 
     if deltas.is_empty() {
-        f.render_widget(Paragraph::new("No processes found").style(Style::default().fg(Color::Yellow)), inner);
+        f.render_widget(
+            Paragraph::new("No processes found").style(Style::default().fg(Color::Yellow)),
+            inner,
+        );
         return;
     }
 
@@ -799,7 +1017,9 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
         .map(|(i, p)| {
             let is_selected = i == app.selected_index;
             let base_style = if is_selected {
-                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -827,7 +1047,7 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
             } else {
                 truncate(&p.name, 12)
             };
-            
+
             let user_display = if app.process_horizontal_scroll > 0 && p.user.len() > 8 {
                 let start = app.process_horizontal_scroll.min(p.user.len() - 8);
                 truncate(&p.user[start..], 8)
@@ -842,33 +1062,74 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
                 Cell::from(Span::styled(format!("{:>5.1}", p.cpu_percent), cpu_style)),
                 Cell::from(Span::styled(format!("{:>5.1}", p.mem_percent), mem_style)),
                 Cell::from(Span::styled(format!("{:>3}", p.connections), base_style)),
-                Cell::from(Span::styled(format_bytes_per_sec(p.read_bytes_sec), Style::default().fg(Color::Blue))),
-                Cell::from(Span::styled(format_bytes_per_sec(p.write_bytes_sec), Style::default().fg(Color::Magenta))),
+                Cell::from(Span::styled(
+                    format_bytes_per_sec(p.read_bytes_sec),
+                    Style::default().fg(Color::Blue),
+                )),
+                Cell::from(Span::styled(
+                    format_bytes_per_sec(p.write_bytes_sec),
+                    Style::default().fg(Color::Magenta),
+                )),
             ])
         })
         .collect();
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("PID", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Name", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("User", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("CPU%", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("MEM%", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Con", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▼Read", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▲Write", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled(
+            "PID",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Name",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "User",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "CPU%",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "MEM%",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Con",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▼Read",
+            Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▲Write",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        )),
     ]);
 
-    let table = Table::new(rows, [
-        Constraint::Length(7),
-        Constraint::Length(12),
-        Constraint::Length(9),
-        Constraint::Length(6),
-        Constraint::Length(6),
-        Constraint::Length(4),
-        Constraint::Length(10),
-        Constraint::Length(10),
-    ])
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(7),
+            Constraint::Length(12),
+            Constraint::Length(9),
+            Constraint::Length(6),
+            Constraint::Length(6),
+            Constraint::Length(4),
+            Constraint::Length(10),
+            Constraint::Length(10),
+        ],
+    )
     .header(header)
     .column_spacing(1);
 
@@ -879,18 +1140,22 @@ fn draw_process_panel(f: &mut Frame, app: &App, deltas: &[ProcessDelta], area: R
         let mut scrollbar_state = ScrollbarState::new(deltas.len())
             .position(app.scroll_offset)
             .viewport_content_length(visible_rows);
-        
+
         let scrollbar_area = Rect {
             x: inner.x + inner.width.saturating_sub(1),
             y: inner.y + 1,
             width: 1,
             height: inner.height.saturating_sub(2),
         };
-        
+
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .thumb_style(if is_focused { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) })
+                .thumb_style(if is_focused {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                })
                 .track_style(Style::default().fg(Color::DarkGray)),
             scrollbar_area,
             &mut scrollbar_state,
@@ -911,8 +1176,12 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
 
     let style = match app.mode {
         AppMode::Normal => Style::default().bg(Color::DarkGray).fg(Color::White),
-        AppMode::FilterUser | AppMode::FilterPid => Style::default().bg(Color::DarkGray).fg(Color::Yellow),
-        AppMode::Help | AppMode::ProcessDetail | AppMode::UserStats => Style::default().bg(Color::DarkGray).fg(Color::Green),
+        AppMode::FilterUser | AppMode::FilterPid => {
+            Style::default().bg(Color::DarkGray).fg(Color::Yellow)
+        }
+        AppMode::Help | AppMode::ProcessDetail | AppMode::UserStats => {
+            Style::default().bg(Color::DarkGray).fg(Color::Green)
+        }
     };
 
     f.render_widget(Paragraph::new(status_text).style(style), area);
@@ -923,7 +1192,11 @@ pub fn draw_help(f: &mut Frame) {
         .title(" ntop Help ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let area = centered_rect(60, 70, f.area());
     let inner = block.inner(area);
@@ -932,32 +1205,61 @@ pub fn draw_help(f: &mut Frame) {
 
     let help_text = vec![
         Line::from(""),
-        Line::from(vec![Span::styled("ntop", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)), Span::raw(" - Network & Disk I/O Monitor")]),
+        Line::from(vec![
+            Span::styled(
+                "ntop",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" - Network & Disk I/O Monitor"),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("Focus Panels (Tab to cycle)", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(
+            "Focus Panels (Tab to cycle)",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
         Line::from("  Tab       Cycle focus: Network → NFS → Disk I/O → Disk Usage → Processes"),
         Line::from("  ↑/↓       Scroll the focused panel"),
         Line::from(""),
-        Line::from(vec![Span::styled("Navigation (Processes)", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(
+            "Navigation (Processes)",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
         Line::from("  ↑/k       Move up        ↓/j    Move down"),
         Line::from("  Enter     Show process details"),
         Line::from(""),
-        Line::from(vec![Span::styled("Filtering", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(
+            "Filtering",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
         Line::from("  u         Filter by username"),
         Line::from("  p         Filter by PID"),
         Line::from("  c         Clear filter"),
         Line::from(""),
-        Line::from(vec![Span::styled("Sorting", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(
+            "Sorting",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
         Line::from("  s         Cycle: CPU% → MEM% → READ → WRITE → CONN → PID"),
         Line::from(""),
-        Line::from(vec![Span::styled("Statistics", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(
+            "Statistics",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
         Line::from("  t         Show user statistics (aggregate by user)"),
         Line::from(""),
-        Line::from(vec![Span::styled("General", Style::default().add_modifier(Modifier::BOLD))]),
+        Line::from(vec![Span::styled(
+            "General",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]),
         Line::from("  h/?       Show help"),
         Line::from("  q         Quit"),
         Line::from(""),
-        Line::from(Span::styled("  Press any key to close", Style::default().fg(Color::Yellow))),
+        Line::from(Span::styled(
+            "  Press any key to close",
+            Style::default().fg(Color::Yellow),
+        )),
     ];
 
     f.render_widget(Paragraph::new(help_text), inner);
@@ -985,7 +1287,12 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 fn truncate(s: &str, max_len: usize) -> String {
     if s.chars().count() > max_len {
-        format!("{}…", s.chars().take(max_len.saturating_sub(1)).collect::<String>())
+        format!(
+            "{}…",
+            s.chars()
+                .take(max_len.saturating_sub(1))
+                .collect::<String>()
+        )
     } else {
         s.to_string()
     }
@@ -996,7 +1303,11 @@ fn draw_process_detail(f: &mut Frame, pid: u32) {
         .title(format!(" Process Detail - PID {} ", pid))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let area = centered_rect(70, 60, f.area());
     let inner = block.inner(area);
@@ -1051,7 +1362,10 @@ fn draw_process_detail(f: &mut Frame, pid: u32) {
             Span::raw(state),
         ]));
         details.push(Line::from(vec![
-            Span::styled("Parent PID: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Parent PID: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw(ppid),
         ]));
         details.push(Line::from(vec![
@@ -1084,7 +1398,10 @@ fn draw_process_detail(f: &mut Frame, pid: u32) {
     if let Ok(exe) = std::fs::read_link(format!("/proc/{}/exe", pid)) {
         details.push(Line::from(""));
         details.push(Line::from(vec![
-            Span::styled("Executable: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Executable: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw(exe.to_string_lossy().to_string()),
         ]));
     }
@@ -1092,7 +1409,10 @@ fn draw_process_detail(f: &mut Frame, pid: u32) {
     // Read cwd
     if let Ok(cwd) = std::fs::read_link(format!("/proc/{}/cwd", pid)) {
         details.push(Line::from(vec![
-            Span::styled("Working Dir: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Working Dir: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw(cwd.to_string_lossy().to_string()),
         ]));
     }
@@ -1102,7 +1422,10 @@ fn draw_process_detail(f: &mut Frame, pid: u32) {
     }
 
     details.push(Line::from(""));
-    details.push(Line::from(Span::styled("  Press any key to close", Style::default().fg(Color::Yellow))));
+    details.push(Line::from(Span::styled(
+        "  Press any key to close",
+        Style::default().fg(Color::Yellow),
+    )));
 
     f.render_widget(Paragraph::new(details), inner);
 }
@@ -1124,15 +1447,17 @@ pub fn aggregate_by_user(processes: &[ProcessDelta]) -> Vec<UserStats> {
     let mut user_map: HashMap<String, UserStats> = HashMap::new();
 
     for proc in processes {
-        let entry = user_map.entry(proc.user.clone()).or_insert_with(|| UserStats {
-            username: proc.user.clone(),
-            process_count: 0,
-            total_cpu: 0.0,
-            total_mem: 0.0,
-            total_read_bytes: 0,
-            total_write_bytes: 0,
-            total_connections: 0,
-        });
+        let entry = user_map
+            .entry(proc.user.clone())
+            .or_insert_with(|| UserStats {
+                username: proc.user.clone(),
+                process_count: 0,
+                total_cpu: 0.0,
+                total_mem: 0.0,
+                total_read_bytes: 0,
+                total_write_bytes: 0,
+                total_connections: 0,
+            });
 
         entry.process_count += 1;
         entry.total_cpu += proc.cpu_percent;
@@ -1144,7 +1469,11 @@ pub fn aggregate_by_user(processes: &[ProcessDelta]) -> Vec<UserStats> {
 
     let mut result: Vec<UserStats> = user_map.into_values().collect();
     // Sort by CPU usage descending
-    result.sort_by(|a, b| b.total_cpu.partial_cmp(&a.total_cpu).unwrap_or(std::cmp::Ordering::Equal));
+    result.sort_by(|a, b| {
+        b.total_cpu
+            .partial_cmp(&a.total_cpu)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     result
 }
 
@@ -1155,7 +1484,11 @@ fn draw_user_stats(f: &mut Frame, processes: &[ProcessDelta]) {
         .title(format!(" User Statistics [{} users] ", user_stats.len()))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Green))
-        .title_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
+        .title_style(
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        );
 
     let area = centered_rect(80, 70, f.area());
     let inner = block.inner(area);
@@ -1168,13 +1501,40 @@ fn draw_user_stats(f: &mut Frame, processes: &[ProcessDelta]) {
     }
 
     let header = Row::new(vec![
-        Cell::from(Span::styled("User", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Procs", Style::default().add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("CPU%", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("MEM%", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▼Read", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("▲Write", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))),
-        Cell::from(Span::styled("Conns", Style::default().add_modifier(Modifier::BOLD))),
+        Cell::from(Span::styled(
+            "User",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Procs",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "CPU%",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "MEM%",
+            Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▼Read",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "▲Write",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Cell::from(Span::styled(
+            "Conns",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
     ]);
 
     let rows: Vec<Row> = user_stats
@@ -1201,22 +1561,31 @@ fn draw_user_stats(f: &mut Frame, processes: &[ProcessDelta]) {
                 Cell::from(Span::raw(format!("{}", u.process_count))),
                 Cell::from(Span::styled(format!("{:.1}", u.total_cpu), cpu_style)),
                 Cell::from(Span::styled(format!("{:.1}", u.total_mem), mem_style)),
-                Cell::from(Span::styled(format_bytes_per_sec(u.total_read_bytes as f64), Style::default().fg(Color::Green))),
-                Cell::from(Span::styled(format_bytes_per_sec(u.total_write_bytes as f64), Style::default().fg(Color::Magenta))),
+                Cell::from(Span::styled(
+                    format_bytes_per_sec(u.total_read_bytes as f64),
+                    Style::default().fg(Color::Green),
+                )),
+                Cell::from(Span::styled(
+                    format_bytes_per_sec(u.total_write_bytes as f64),
+                    Style::default().fg(Color::Magenta),
+                )),
                 Cell::from(Span::raw(format!("{}", u.total_connections))),
             ])
         })
         .collect();
 
-    let table = Table::new(rows, [
-        Constraint::Length(12),
-        Constraint::Length(6),
-        Constraint::Length(8),
-        Constraint::Length(8),
-        Constraint::Length(12),
-        Constraint::Length(12),
-        Constraint::Length(6),
-    ])
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(12),
+            Constraint::Length(6),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(6),
+        ],
+    )
     .header(header)
     .column_spacing(1);
 

@@ -1,6 +1,6 @@
-use std::fs;
-use std::collections::HashMap;
 use anyhow::Result;
+use std::collections::HashMap;
+use std::fs;
 use users::get_user_by_uid;
 
 #[derive(Debug, Clone)]
@@ -55,7 +55,8 @@ impl ProcessCollector {
         if let Ok(content) = fs::read_to_string("/proc/meminfo") {
             for line in content.lines() {
                 if line.starts_with("MemTotal:") {
-                    return line.split(':')
+                    return line
+                        .split(':')
                         .nth(1)
                         .and_then(|s| s.trim().split_whitespace().next())
                         .and_then(|s| s.parse().ok())
@@ -102,11 +103,15 @@ impl ProcessCollector {
             let mut write_bytes = 0u64;
             for line in content.lines() {
                 if line.starts_with("read_bytes:") {
-                    read_bytes = line.split(':').nth(1)
+                    read_bytes = line
+                        .split(':')
+                        .nth(1)
                         .and_then(|s| s.trim().parse().ok())
                         .unwrap_or(0);
                 } else if line.starts_with("write_bytes:") {
-                    write_bytes = line.split(':').nth(1)
+                    write_bytes = line
+                        .split(':')
+                        .nth(1)
                         .and_then(|s| s.trim().parse().ok())
                         .unwrap_or(0);
                 }
@@ -125,12 +130,12 @@ impl ProcessCollector {
                     if let Ok(link) = fs::read_link(e.path()) {
                         let link_str = link.to_string_lossy().to_string();
                         if link_str.starts_with("socket:[") {
-                                return Some(());
-                            }
+                            return Some(());
                         }
-                        None
-                    })
-                    .count()
+                    }
+                    None
+                })
+                .count();
         }
         0
     }
@@ -217,21 +222,22 @@ impl ProcessCollector {
             // Formula: (delta_ticks / clock_tick) / elapsed_time * 100
             // This gives percentage of one CPU core. For multi-threaded processes,
             // this can exceed 100% (e.g., 400% means using 4 cores fully)
-            let cpu_percent = if let Some((last_utime, last_stime, last_time)) = self.last_cpu.get(&pid) {
-                let time_elapsed = now.duration_since(*last_time).as_secs_f64();
-                if time_elapsed > 0.0 && self.clock_tick > 0 {
-                    let delta_utime = utime.saturating_sub(*last_utime) as f64;
-                    let delta_stime = stime.saturating_sub(*last_stime) as f64;
-                    let delta_ticks = delta_utime + delta_stime;
-                    // Convert ticks to seconds, then to percentage
-                    let cpu_time = delta_ticks / self.clock_tick as f64;
-                    (cpu_time / time_elapsed) * 100.0
+            let cpu_percent =
+                if let Some((last_utime, last_stime, last_time)) = self.last_cpu.get(&pid) {
+                    let time_elapsed = now.duration_since(*last_time).as_secs_f64();
+                    if time_elapsed > 0.0 && self.clock_tick > 0 {
+                        let delta_utime = utime.saturating_sub(*last_utime) as f64;
+                        let delta_stime = stime.saturating_sub(*last_stime) as f64;
+                        let delta_ticks = delta_utime + delta_stime;
+                        // Convert ticks to seconds, then to percentage
+                        let cpu_time = delta_ticks / self.clock_tick as f64;
+                        (cpu_time / time_elapsed) * 100.0
+                    } else {
+                        0.0
+                    }
                 } else {
                     0.0
-                }
-            } else {
-                0.0
-            };
+                };
 
             current_io.insert(pid, (read_bytes, write_bytes));
             current_cpu.insert(pid, (utime, stime, now));
@@ -262,7 +268,7 @@ impl ProcessCollector {
 
     pub fn collect_delta(&mut self) -> Result<Vec<ProcessDelta>> {
         let processes = self.collect()?;
-        
+
         Ok(processes
             .into_iter()
             .map(|p| ProcessDelta {
