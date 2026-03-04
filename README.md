@@ -36,7 +36,9 @@ Download pre-built binaries from [GitHub Releases](https://github.com/WangLabCSU
 
 ```bash
 # Download for x86_64 Linux (glibc)
-wget https://github.com/WangLabCSU/ntop/releases/download/v0.1.1/ntop-x86_64-unknown-linux-gnu.tar.gz
+wget https://github.com/WangLabCSU/ntop/releases/latest/download/ntop-x86_64-unknown-linux-gnu.tar.gz
+# For China
+# wget https://ghfast.top/https://github.com/WangLabCSU/ntop/releases/latest/download/ntop-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf ntop-x86_64-unknown-linux-gnu.tar.gz
 sudo mv ntop /usr/local/bin/
 ```
